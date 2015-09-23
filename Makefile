@@ -21,11 +21,14 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 $(SHARED_LIB): $(OBJECTS) 
-	$(CC) -shared -o $@ $< -lubox -lblobmsg_json -ldl
+	$(CC) -shared -o $@ $^ -lubox -lblobmsg_json -ldl
 
 $(STATIC_LIB): $(OBJECTS)
-	$(AR) rcs -o $@ $<
+	$(AR) rcs -o $@ $^
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+clean: 
+	rm -rf build_dir
