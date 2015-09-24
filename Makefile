@@ -13,19 +13,29 @@ SOURCE=\
 
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
-CFLAGS+=-Wall -Werror -std=gnu99
+CFLAGS+=-fPIC -Wall -Werror -std=gnu99
 
-all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB)
+all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) extras 
+
+extras: 
+	make -C lua 
+	make -C examples 
+
+.PHONY: extras
 
 $(BUILD_DIR): 
 	mkdir -p $(BUILD_DIR)
 
 $(SHARED_LIB): $(OBJECTS) 
-	$(CC) -shared -o $@ $< -lubox -lblobmsg_json -ldl
+	$(CC) -shared -Wl,--no-undefined -o $@ $^ -lubox -lblobmsg_json -ldl
 
 $(STATIC_LIB): $(OBJECTS)
-	$(AR) rcs -o $@ $<
+	$(AR) rcs -o $@ $^
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $^ -o $@
+
+clean: 
+	make -C lua clean 
+	rm -rf build_dir

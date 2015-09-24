@@ -32,6 +32,7 @@ int ubus_register_subscriber(struct ubus_context *ctx, struct ubus_subscriber *s
 	struct ubus_method *watch = calloc(1, sizeof(struct ubus_method)); 
 	ubus_method_init(watch, NULL, ubus_subscriber_cb); 
 
+	s->watch_method = watch; 
 	obj->methods = watch;
 	obj->n_methods = 1;
 

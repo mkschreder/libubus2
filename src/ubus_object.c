@@ -22,13 +22,15 @@ ubus_process_unsubscribe(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	if (!obj || !attrbuf[UBUS_ATTR_TARGET])
 		return;
 
-	if (obj->methods != &watch_method)
+	s = container_of(obj, struct ubus_subscriber, obj);
+	
+	if (obj->methods != s->watch_method)
 		return;
 
-	s = container_of(obj, struct ubus_subscriber, obj);
 	if (s->remove_cb)
 		s->remove_cb(ctx, s, blob_get_u32(attrbuf[UBUS_ATTR_TARGET]));
 }
+
 
 static void
 ubus_process_notify(struct ubus_context *ctx, struct ubus_msghdr *hdr,
