@@ -48,11 +48,11 @@ static int
 __ubus_subscribe_request(struct ubus_context *ctx, struct ubus_object *obj, uint32_t id, int type){
 	struct ubus_request req;
 
-	blob_buf_reset(&ctx->buf, 0);
+	blob_buf_reset(&ctx->buf);
 	blob_buf_put_int32(&ctx->buf, UBUS_ATTR_OBJID, obj->id);
 	blob_buf_put_int32(&ctx->buf, UBUS_ATTR_TARGET, id);
 
-	if (ubus_start_request(ctx, &req, ctx->buf.head, type, 0) < 0)
+	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), type, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	return ubus_complete_request(ctx, &req, 0);

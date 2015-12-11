@@ -136,8 +136,8 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	hdr.peer = peer;
 
 	if (!msg) {
-		blob_buf_reset(&ctx->buf, 0);
-		msg = ctx->buf.head;
+		blob_buf_reset(&ctx->buf);
+		msg = blob_buf_data(&ctx->buf);
 	}
 
 	iov[1].iov_base = (char *) msg;
@@ -396,8 +396,7 @@ int ubus_connect(struct ubus_context *ctx, const char *path)
 }
 
 
-int ubus_reconnect(struct ubus_context *ctx, const char *path)
-{
+int ubus_reconnect(struct ubus_context *ctx, const char *path){
 	struct {
 		struct ubus_msghdr hdr;
 		struct blob_attr data;

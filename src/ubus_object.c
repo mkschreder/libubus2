@@ -195,7 +195,7 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj){
 	struct ubus_request req;
 	int ret;
 
-	blob_buf_reset(&ctx->buf, 0);
+	blob_buf_reset(&ctx->buf);
 
 	if (obj->name && obj->type) {
 		blob_buf_put_string(&ctx->buf, UBUS_ATTR_OBJPATH, obj->name);
@@ -206,7 +206,7 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj){
 			return UBUS_STATUS_INVALID_ARGUMENT;
 	}
 
-	if (ubus_start_request(ctx, &req, ctx->buf.head, UBUS_MSG_ADD_OBJECT, 0) < 0)
+	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), UBUS_MSG_ADD_OBJECT, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	req.raw_data_cb = ubus_add_object_cb;
@@ -242,10 +242,10 @@ int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 	struct ubus_request req;
 	int ret;
 
-	blob_buf_reset(&ctx->buf, 0);
+	blob_buf_reset(&ctx->buf);
 	blob_buf_put_int32(&ctx->buf, UBUS_ATTR_OBJID, obj->id);
 
-	if (ubus_start_request(ctx, &req, ctx->buf.head, UBUS_MSG_REMOVE_OBJECT, 0) < 0)
+	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), UBUS_MSG_REMOVE_OBJECT, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	req.raw_data_cb = ubus_remove_object_cb;

@@ -17,7 +17,7 @@ static int test_method(struct ubus_context *ctx, struct ubus_object *obj,
 	blobmsg_add_u32(&bb, "bar", 11);
 	blobmsg_close_table(&bb, t);
 
-	ubus_send_reply(ctx, req, bb.head);
+	ubus_send_reply(ctx, req, blob_buf_data(&bb));
 	return 0;
 }
 
