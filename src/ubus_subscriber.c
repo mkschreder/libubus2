@@ -40,6 +40,10 @@ int ubus_register_subscriber(struct ubus_context *ctx, struct ubus_subscriber *s
 	return ubus_add_object(ctx, obj);
 }
 
+int ubus_unregister_subscriber(struct ubus_context *ctx, struct ubus_subscriber *obj){
+	return ubus_remove_object(ctx, &obj->obj);
+}
+
 static int
 __ubus_subscribe_request(struct ubus_context *ctx, struct ubus_object *obj, uint32_t id, int type){
 	struct ubus_request req;

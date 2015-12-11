@@ -17,6 +17,11 @@
 extern struct blob_buf b;
 extern const struct ubus_method watch_method;
 
+struct ubus_pending_msg {
+	struct list_head list;
+	struct ubus_msghdr_buf hdr;
+};
+
 struct ubus_context; 
 struct ubus_request; 
 
@@ -29,7 +34,6 @@ int __hidden ubus_start_request(struct ubus_context *ctx, struct ubus_request *r
 				struct blob_attr *msg, int cmd, uint32_t peer);
 void ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf);
 void ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
-void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout);
-
+void  ubus_poll_data(struct ubus_context *ctx, int timeout); 
 
 #endif

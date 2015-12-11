@@ -1156,7 +1156,7 @@ int main(int argc, char **argv)
 
 	printf("connected as %08x\n", ctx->local_id);
 	
-	ubus_add_uloop(ctx);
+	//ubus_add_uloop(ctx);
 
 	ubus_add_object(ctx, &test_object);
 	

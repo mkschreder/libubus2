@@ -297,35 +297,7 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	return true;
 }
 
-void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
-{
-	struct ubus_context *ctx = container_of(u, struct ubus_context, sock);
-	int recv_fd = -1;
-
-	while (get_next_msg(ctx, &recv_fd)) {
-		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
-		//if (uloop_cancelled)
-		//	break;
-	}
-
-	if (u->eof)
-		ctx->connection_lost(ctx);
-}
-
-void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
-{
-	struct pollfd pfd = {
-		.fd = ctx->sock.fd,
-		.events = POLLIN | POLLERR,
-	};
-
-	poll(&pfd, 1, timeout);
-	ubus_handle_data(&ctx->sock, ULOOP_READ);
-}
-
-static void
-ubus_refresh_state(struct ubus_context *ctx)
-{
+static void ubus_refresh_state(struct ubus_context *ctx){
 	struct ubus_object *obj, *tmp;
 	struct ubus_object **objs;
 	int n, i = 0;
@@ -345,6 +317,84 @@ ubus_refresh_state(struct ubus_context *ctx)
 	for (n = i, i = 0; i < n; i++)
 		ubus_add_object(ctx, objs[i]);
 }
+
+static void _ubus_default_connection_lost(struct ubus_context *ctx){
+	if (ctx->sock.registered)
+		uloop_delete(&ctx->uloop);
+}
+
+
+static void _ubus_process_pending_msg(struct uloop_timeout *timeout){
+	struct ubus_context *ctx = container_of(timeout, struct ubus_context, pending_timer);
+	struct ubus_pending_msg *pending;
+
+	while (!ctx->stack_depth && !list_empty(&ctx->pending)) {
+		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
+		list_del(&pending->list);
+		ubus_process_msg(ctx, &pending->hdr, -1);
+		free(pending);
+	}
+}
+
+
+static void _ubus_handle_data(struct uloop_fd *u, unsigned int events){
+	struct ubus_context *ctx = container_of(u, struct ubus_context, sock);
+	int recv_fd = -1;
+
+	while (get_next_msg(ctx, &recv_fd)) {
+		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
+		//if (uloop_cancelled)
+		//	break;
+	}
+
+	if (u->eof)
+		ctx->connection_lost(ctx);
+}
+
+//struct blob_buf b __hidden = {};
+static int ubus_cmp_id(const void *k1, const void *k2, void *ptr){
+	const uint32_t *id1 = k1, *id2 = k2;
+
+	if (*id1 < *id2)
+		return -1;
+	else
+		return *id1 > *id2;
+}
+
+
+void  ubus_poll_data(struct ubus_context *ctx, int timeout){
+	struct pollfd pfd = {
+		.fd = ctx->sock.fd,
+		.events = POLLIN | POLLERR,
+	};
+
+	poll(&pfd, 1, timeout);
+	_ubus_handle_data(&ctx->sock, ULOOP_READ);
+}
+
+int ubus_connect(struct ubus_context *ctx, const char *path)
+{
+	ctx->sock.fd = -1;
+	ctx->sock.cb = _ubus_handle_data;
+	ctx->connection_lost = _ubus_default_connection_lost;
+	ctx->pending_timer.cb = _ubus_process_pending_msg;
+
+	ctx->msgbuf.data = calloc(UBUS_MSG_CHUNK_SIZE, sizeof(char));
+	if (!ctx->msgbuf.data)
+		return -1;
+	ctx->msgbuf_data_len = UBUS_MSG_CHUNK_SIZE;
+
+	INIT_LIST_HEAD(&ctx->requests);
+	INIT_LIST_HEAD(&ctx->pending);
+	avl_init(&ctx->objects, ubus_cmp_id, false, NULL);
+	if (ubus_reconnect(ctx, path)) {
+		free(ctx->msgbuf.data);
+		return -1;
+	}
+
+	return 0;
+}
+
 
 int ubus_reconnect(struct ubus_context *ctx, const char *path)
 {
@@ -403,3 +453,45 @@ out_close:
 
 	return ret;
 }
+
+static void ubus_auto_reconnect_cb(struct uloop_timeout *timeout)
+{
+	//struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
+
+	fprintf(stderr, "%s: fix autoreconnect!\n", __FUNCTION__); 
+
+	//if (!ubus_reconnect(&conn->ctx, conn->path))
+	//	ubus_add_uloop(&conn->ctx);
+	//else
+	//	uloop_timeout_set(self->uloop, timeout, 1000);
+}
+
+static void ubus_auto_disconnect_cb(struct ubus_context *ctx)
+{
+	struct ubus_auto_conn *conn = container_of(ctx, struct ubus_auto_conn, ctx);
+
+	conn->timer.cb = ubus_auto_reconnect_cb;
+	uloop_timeout_set(&conn->timer, 1000);
+}
+
+static void ubus_auto_connect_cb(struct uloop_timeout *timeout)
+{
+	struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
+
+	if (ubus_connect(&conn->ctx, conn->path)) {
+		uloop_timeout_set(timeout, 1000);
+		fprintf(stderr, "failed to connect to ubus\n");
+		return;
+	}
+	conn->ctx.connection_lost = ubus_auto_disconnect_cb;
+	if (conn->cb)
+		conn->cb(&conn->ctx);
+	//ubus_add_uloop(&conn->ctx);
+}
+
+void ubus_auto_connect(struct ubus_auto_conn *conn)
+{
+	conn->timer.cb = ubus_auto_connect_cb;
+	ubus_auto_connect_cb(&conn->timer);
+}
+

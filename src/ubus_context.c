@@ -13,11 +13,6 @@
 #include "ubus_request.h"
 #include "ubus_socket.h"
 
-struct ubus_pending_msg {
-	struct list_head list;
-	struct ubus_msghdr_buf hdr;
-};
-
 void ubus_init(struct ubus_context *self){
 	memset(self, 0, sizeof(*self)); 	
 	self->uloop = uloop_new(); 
@@ -50,10 +45,6 @@ void ubus_delete(struct ubus_context **self){
 
 void ubus_handle_event(struct ubus_context *ctx){
 	ctx->sock.cb(&ctx->sock, ULOOP_READ);
-}
-
-int ubus_unregister_subscriber(struct ubus_context *ctx, struct ubus_subscriber *obj){
-	return ubus_remove_object(ctx, &obj->obj);
 }
 
 static void ubus_queue_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf){
@@ -139,11 +130,9 @@ int ubus_complete_request(struct ubus_context *ctx, struct ubus_request *req,
 	int status = UBUS_STATUS_NO_DATA;
 	int64_t timeout = 0, time_end = 0;
 
-	/*
-	if (!registered) {
-		uloop_init();
-		ubus_add_uloop(ctx);
-	}*/
+	//if (!registered) {
+	//	ubus_add_uloop(ctx);
+	//}
 
 	if (req_timeout)
 		time_end = get_time_msec() + req_timeout;
@@ -528,19 +517,6 @@ void __hidden ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf 
 		break;
 	}
 }
-
-static void _ubus_process_pending_msg(struct uloop_timeout *timeout){
-	struct ubus_context *ctx = container_of(timeout, struct ubus_context, pending_timer);
-	struct ubus_pending_msg *pending;
-
-	while (!ctx->stack_depth && !list_empty(&ctx->pending)) {
-		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
-		list_del(&pending->list);
-		ubus_process_msg(ctx, &pending->hdr, -1);
-		free(pending);
-	}
-}
-
 struct ubus_lookup_request {
 	struct ubus_request req;
 	ubus_lookup_handler_t cb;
@@ -680,85 +656,5 @@ int ubus_send_event(struct ubus_context *ctx, const char *id,
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	return ubus_complete_request(ctx, &req, 0);
-}
-
-static void _ubus_default_connection_lost(struct ubus_context *ctx)
-{
-	if (ctx->sock.registered)
-		uloop_delete(&ctx->uloop);
-}
-
-//struct blob_buf b __hidden = {};
-static int ubus_cmp_id(const void *k1, const void *k2, void *ptr){
-	const uint32_t *id1 = k1, *id2 = k2;
-
-	if (*id1 < *id2)
-		return -1;
-	else
-		return *id1 > *id2;
-}
-
-int ubus_connect(struct ubus_context *ctx, const char *path)
-{
-	ctx->sock.fd = -1;
-	ctx->sock.cb = ubus_handle_data;
-	ctx->connection_lost = _ubus_default_connection_lost;
-	ctx->pending_timer.cb = _ubus_process_pending_msg;
-
-	ctx->msgbuf.data = calloc(UBUS_MSG_CHUNK_SIZE, sizeof(char));
-	if (!ctx->msgbuf.data)
-		return -1;
-	ctx->msgbuf_data_len = UBUS_MSG_CHUNK_SIZE;
-
-	INIT_LIST_HEAD(&ctx->requests);
-	INIT_LIST_HEAD(&ctx->pending);
-	avl_init(&ctx->objects, ubus_cmp_id, false, NULL);
-	if (ubus_reconnect(ctx, path)) {
-		free(ctx->msgbuf.data);
-		return -1;
-	}
-
-	return 0;
-}
-
-static void ubus_auto_reconnect_cb(struct uloop_timeout *timeout)
-{
-	//struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
-
-	fprintf(stderr, "%s: fix autoreconnect!\n", __FUNCTION__); 
-
-	//if (!ubus_reconnect(&conn->ctx, conn->path))
-		//ubus_add_uloop(&conn->ctx);
-	//else
-	//		uloop_timeout_set(timeout, 1000);
-}
-
-static void ubus_auto_disconnect_cb(struct ubus_context *ctx)
-{
-	struct ubus_auto_conn *conn = container_of(ctx, struct ubus_auto_conn, ctx);
-
-	conn->timer.cb = ubus_auto_reconnect_cb;
-	uloop_timeout_set(&conn->timer, 1000);
-}
-
-static void ubus_auto_connect_cb(struct uloop_timeout *timeout)
-{
-	struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
-
-	if (ubus_connect(&conn->ctx, conn->path)) {
-		uloop_timeout_set(timeout, 1000);
-		fprintf(stderr, "failed to connect to ubus\n");
-		return;
-	}
-	conn->ctx.connection_lost = ubus_auto_disconnect_cb;
-	if (conn->cb)
-		conn->cb(&conn->ctx);
-	//ubus_add_uloop(&conn->ctx);
-}
-
-void ubus_auto_connect(struct ubus_auto_conn *conn)
-{
-	conn->timer.cb = ubus_auto_connect_cb;
-	ubus_auto_connect_cb(&conn->timer);
 }
 

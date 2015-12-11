@@ -33,7 +33,7 @@ $(STATIC_LIB): $(OBJECTS)
 	$(AR) rcs -o $@ $^
 
 threads-example: examples/threads.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/threads.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/threads.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
