@@ -1,6 +1,6 @@
 BUILD_DIR=build_dir
-STATIC_LIB=$(BUILD_DIR)/libubus2.a
-SHARED_LIB=$(BUILD_DIR)/libubus2.so 
+STATIC_LIB=libubus2.a
+SHARED_LIB=libubus2.so 
 SOURCE=\
 	src/ubus_context.c \
 	src/ubus_method.c \
@@ -13,13 +13,13 @@ SOURCE=\
 
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
-CFLAGS+=-fPIC -Wall -Werror -std=gnu99
+CFLAGS+=-Isrc -Wall -Werror -std=gnu99
+LDFLAGS+=-lblobpack -lusys -lutype -ljson-c -ldl
 
-all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) extras 
+all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) threads-example
 
-extras: 
-	make -C lua 
-	make -C examples 
+#extras: 
+#	make -C lua 
 
 .PHONY: extras
 
@@ -27,15 +27,23 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 $(SHARED_LIB): $(OBJECTS) 
-	$(CC) -shared -Wl,--no-undefined -o $@ $^ -lubox -lblobmsg_json -ldl
+	$(CC) -shared -fPIC -Wl,--no-undefined -o $@ $^ $(LDFLAGS) 
 
 $(STATIC_LIB): $(OBJECTS)
 	$(AR) rcs -o $@ $^
 
+threads-example: examples/threads.o $(OBJECTS)
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/threads.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2
+
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $^ -o $@
+	$(CC) -fPIC $(CFLAGS) -c $^ -o $@
 
+install: 
+	mkdir -p $(INSTALL_PREFIX)/lib/
+	mkdir -p $(INSTALL_PREFIX)/include/libubus2/
+	cp -R $(SHARED_LIB) $(STATIC_LIB) $(INSTALL_PREFIX)/lib
+	cp -R src/*.h $(INSTALL_PREFIX)/include/libubus2/
 clean: 
-	make -C lua clean 
 	rm -rf build_dir
+	rm -f examples/*.o

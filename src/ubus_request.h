@@ -1,7 +1,7 @@
 #pragma once
 
 #include <inttypes.h>
-#include <libubox/blobmsg.h>
+#include <blobpack/blobpack.h>
 
 #include "ubus_object.h"
 
@@ -46,4 +46,6 @@ struct ubus_request {
 	struct ubus_context *ctx;
 	void *priv;
 };
+
+void ubus_request_set_status(struct ubus_request *req, int ret); 
 

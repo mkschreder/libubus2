@@ -1,5 +1,7 @@
 #pragma once 
 
+struct ubus_subscriber; 
+
 typedef void (*ubus_subscriber_remove_handler_t)(struct ubus_context *ctx,
 				      struct ubus_subscriber *obj, uint32_t id);
 

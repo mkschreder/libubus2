@@ -20,11 +20,11 @@
 #include <fcntl.h>
 #include <poll.h>
 
-#include <libubox/usock.h>
-#include <libubox/blob.h>
-#include <libubox/blobmsg.h>
+#include <libusys/usock.h>
 
-#include "libubus2.h"
+#include <blobpack/blobpack.h>
+
+#include "ubus_context.h"
 
 #define STATIC_IOV(_var) { .iov_base = (char *) &(_var), .iov_len = sizeof(_var) }
 
@@ -44,7 +44,7 @@ static struct blob_attr *attrbuf[UBUS_ATTR_MAX];
 
 __hidden struct blob_attr **ubus_parse_msg(struct blob_attr *msg)
 {
-	blob_parse(msg, attrbuf, ubus_policy, UBUS_ATTR_MAX);
+	blob_attr_parse(msg, attrbuf, ubus_policy, UBUS_ATTR_MAX);
 	return attrbuf;
 }
 
@@ -136,12 +136,12 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	hdr.peer = peer;
 
 	if (!msg) {
-		blob_buf_init(&b, 0);
-		msg = b.head;
+		blob_buf_reset(&ctx->buf, 0);
+		msg = ctx->buf.head;
 	}
 
 	iov[1].iov_base = (char *) msg;
-	iov[1].iov_len = blob_raw_len(msg);
+	iov[1].iov_len = blob_attr_raw_len(msg);
 
 	ret = writev_retry(ctx->sock.fd, iov, ARRAY_SIZE(iov), fd);
 	if (ret < 0)
@@ -153,8 +153,7 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	return ret;
 }
 
-static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd)
-{
+static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd){
 	int bytes, total = 0;
 	static struct {
 		struct cmsghdr h;
@@ -190,8 +189,8 @@ static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd)
 
 		if (bytes < 0) {
 			bytes = 0;
-			if (uloop_cancelled)
-				return 0;
+			//if (ctx->cancelled)
+			//	return 0;
 			if (errno == EINTR)
 				continue;
 
@@ -222,10 +221,10 @@ static bool ubus_validate_hdr(struct ubus_msghdr *hdr)
 	if (hdr->version != 0)
 		return false;
 
-	if (blob_raw_len(data) < sizeof(*data))
+	if (blob_attr_raw_len(data) < sizeof(*data))
 		return false;
 
-	if (blob_pad_len(data) > UBUS_MAX_MSGLEN)
+	if (blob_attr_pad_len(data) > UBUS_MAX_MSGLEN)
 		return false;
 
 	return true;
@@ -283,7 +282,7 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	if (!ubus_validate_hdr(&hdrbuf.hdr))
 		return false;
 
-	len = blob_raw_len(&hdrbuf.data);
+	len = blob_attr_raw_len(&hdrbuf.data);
 	if (!alloc_msg_buf(ctx, len))
 		return false;
 
@@ -291,7 +290,7 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	memcpy(ctx->msgbuf.data, &hdrbuf.data, sizeof(hdrbuf.data));
 
 	iov.iov_base = (char *)ctx->msgbuf.data + sizeof(hdrbuf.data);
-	iov.iov_len = blob_len(ctx->msgbuf.data);
+	iov.iov_len = blob_attr_len(ctx->msgbuf.data);
 	if (iov.iov_len > 0 && !recv_retry(ctx->sock.fd, &iov, true, NULL))
 		return false;
 
@@ -305,8 +304,8 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 
 	while (get_next_msg(ctx, &recv_fd)) {
 		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
-		if (uloop_cancelled)
-			break;
+		//if (uloop_cancelled)
+		//	break;
 	}
 
 	if (u->eof)
@@ -361,7 +360,7 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 
 	if (ctx->sock.fd >= 0) {
 		if (ctx->sock.registered)
-			uloop_fd_delete(&ctx->sock);
+			uloop_remove_fd(ctx->uloop, &ctx->sock);
 
 		close(ctx->sock.fd);
 	}
@@ -379,12 +378,12 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 	if (hdr.hdr.type != UBUS_MSG_HELLO)
 		goto out_close;
 
-	buf = calloc(1, blob_raw_len(&hdr.data));
+	buf = calloc(1, blob_attr_raw_len(&hdr.data));
 	if (!buf)
 		goto out_close;
 
 	memcpy(buf, &hdr.data, sizeof(hdr.data));
-	if (read(ctx->sock.fd, blob_data(buf), blob_len(buf)) != blob_len(buf))
+	if (read(ctx->sock.fd, blob_attr_data(buf), blob_attr_len(buf)) != blob_attr_len(buf))
 		goto out_free;
 
 	ctx->local_id = hdr.hdr.peer;

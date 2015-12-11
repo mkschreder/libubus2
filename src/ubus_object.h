@@ -1,10 +1,9 @@
 #pragma once
 
-#include <libubox/avl.h>
+#include <libutype/avl.h>
 
-#include "ubus_context.h"
+struct ubus_context; 
 
-struct ubus_object; 
 struct ubus_object {
 	struct avl_node avl;
 
@@ -34,4 +33,5 @@ void ubus_object_destroy(struct ubus_object *obj);
 typedef void (*ubus_lookup_handler_t)(struct ubus_context *ctx,
 				      struct ubus_object_data *obj,
 				      void *priv);
+
 

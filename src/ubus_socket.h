@@ -17,6 +17,9 @@
 extern struct blob_buf b;
 extern const struct ubus_method watch_method;
 
+struct ubus_context; 
+struct ubus_request; 
+
 struct blob_attr **ubus_parse_msg(struct blob_attr *msg);
 void ubus_handle_data(struct uloop_fd *u, unsigned int events);
 int ubus_send_msg(struct ubus_context *ctx, uint32_t seq,

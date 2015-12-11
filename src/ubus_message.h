@@ -15,7 +15,7 @@
 #define __UBUSMSG_H
 
 #include <stdint.h>
-#include <libubox/blob.h>
+#include <blobpack/blobpack.h>
 
 #define __packetdata __attribute__((packed)) __attribute__((__aligned__(4)))
 
