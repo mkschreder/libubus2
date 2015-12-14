@@ -16,7 +16,7 @@ OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 CFLAGS+=-Isrc -Wall -Werror -std=gnu99
 LDFLAGS+=-lblobpack -lusys -lutype -ljson-c -ldl
 
-all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) threads-example
+all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) client-example threads-example
 
 #extras: 
 #	make -C lua 
@@ -34,6 +34,9 @@ $(STATIC_LIB): $(OBJECTS)
 
 threads-example: examples/threads.o $(OBJECTS)
 	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/threads.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+
+client-example: examples/client.o $(OBJECTS)
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/client.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)

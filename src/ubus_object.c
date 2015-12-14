@@ -145,14 +145,20 @@ static void ubus_add_object_cb(struct ubus_request *req, int type, struct blob_a
 	struct ubus_object *obj = req->priv;
 	struct blob_attr **attrbuf = ubus_parse_msg(msg);
 
-	if (!attrbuf[UBUS_ATTR_OBJID])
+	if (!attrbuf[UBUS_ATTR_OBJID]) {
+		printf("no object id returned!\n"); 
 		return;
+	}
 
 	obj->id = blob_attr_get_u32(attrbuf[UBUS_ATTR_OBJID]);
+	
+	printf("added object id %d\n", obj->id); 
 
-	if (attrbuf[UBUS_ATTR_OBJTYPE])
+	if (attrbuf[UBUS_ATTR_OBJTYPE]) {
 		obj->type->id = blob_attr_get_u32(attrbuf[UBUS_ATTR_OBJTYPE]);
-
+	}  else {
+		printf("no type returned!\n"); 
+	}
 	obj->avl.key = &obj->id;
 	avl_insert(&req->ctx->objects, &obj->avl);
 }
@@ -200,13 +206,20 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj){
 	if (obj->name && obj->type) {
 		blob_buf_put_string(&ctx->buf, UBUS_ATTR_OBJPATH, obj->name);
 
-		if (obj->type->id)
+		if (obj->type->id){
+			printf("pushing known id %x\n", obj->type->id); 
 			blob_buf_put_int32(&ctx->buf, UBUS_ATTR_OBJTYPE, obj->type->id);
-		else if (!ubus_push_object_type(ctx, obj->type))
-			return UBUS_STATUS_INVALID_ARGUMENT;
+		} 
+		else {
+			printf("pushing signature\n"); 
+			if (!ubus_push_object_type(ctx, obj->type))
+				return UBUS_STATUS_INVALID_ARGUMENT;
+		}
 	}
-
-	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), UBUS_MSG_ADD_OBJECT, 0) < 0)
+	
+	blob_buf_dump(&ctx->buf); 
+	
+	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_ADD_OBJECT, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	req.raw_data_cb = ubus_add_object_cb;
@@ -245,7 +258,7 @@ int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 	blob_buf_reset(&ctx->buf);
 	blob_buf_put_int32(&ctx->buf, UBUS_ATTR_OBJID, obj->id);
 
-	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), UBUS_MSG_REMOVE_OBJECT, 0) < 0)
+	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_REMOVE_OBJECT, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	req.raw_data_cb = ubus_remove_object_cb;

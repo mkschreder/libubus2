@@ -52,7 +52,7 @@ __ubus_subscribe_request(struct ubus_context *ctx, struct ubus_object *obj, uint
 	blob_buf_put_int32(&ctx->buf, UBUS_ATTR_OBJID, obj->id);
 	blob_buf_put_int32(&ctx->buf, UBUS_ATTR_TARGET, id);
 
-	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), type, 0) < 0)
+	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), blob_buf_size(&ctx->buf), type, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	return ubus_complete_request(ctx, &req, 0);

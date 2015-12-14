@@ -122,13 +122,15 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 }
 
 int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
-			   struct blob_attr *msg, int cmd, uint32_t peer, int fd)
+			   void *msg, size_t size, int cmd, uint32_t peer, int fd)
 {
 	struct ubus_msghdr hdr;
 	struct iovec iov[2] = {
 		STATIC_IOV(hdr)
 	};
 	int ret;
+
+	printf("send msg %d %d %d\n", cmd, seq, peer); 
 
 	hdr.version = 0;
 	hdr.type = cmd;
@@ -141,7 +143,7 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	}
 
 	iov[1].iov_base = (char *) msg;
-	iov[1].iov_len = blob_attr_raw_len(msg);
+	iov[1].iov_len = size; ;
 
 	ret = writev_retry(ctx->sock.fd, iov, ARRAY_SIZE(iov), fd);
 	if (ret < 0)
@@ -319,8 +321,8 @@ static void ubus_refresh_state(struct ubus_context *ctx){
 }
 
 static void _ubus_default_connection_lost(struct ubus_context *ctx){
-	if (ctx->sock.registered)
-		uloop_delete(&ctx->uloop);
+	//if (ctx->sock.registered)
+	//		uloop_delete(&ctx->uloop);
 }
 
 

@@ -28,10 +28,10 @@ struct ubus_request;
 struct blob_attr **ubus_parse_msg(struct blob_attr *msg);
 void ubus_handle_data(struct uloop_fd *u, unsigned int events);
 int ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
-		  struct blob_attr *msg, int cmd, uint32_t peer, int fd);
+		  void *msg, size_t size, int cmd, uint32_t peer, int fd);
 void ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
 int __hidden ubus_start_request(struct ubus_context *ctx, struct ubus_request *req,
-				struct blob_attr *msg, int cmd, uint32_t peer);
+				void *msg, size_t size, int cmd, uint32_t peer);
 void ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf);
 void ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
 void  ubus_poll_data(struct ubus_context *ctx, int timeout); 
