@@ -94,17 +94,15 @@ send:
 	ubus_complete_deferred_request(ctx, &req, ret);
 }
 
-void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf)
+void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, struct blob_attr **attrbuf)
 {
 	void (*cb)(struct ubus_context *, struct ubus_msghdr *,
 		   struct ubus_object *, struct blob_attr **);
 	struct ubus_msghdr *hdr = &buf->hdr;
-	struct blob_attr **attrbuf;
 	struct ubus_object *obj;
 	uint32_t objid;
 	void *prev_data = NULL;
 
-	attrbuf = ubus_parse_msg(buf->data);
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
 
@@ -143,19 +141,18 @@ void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_
 static void ubus_add_object_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
 	struct ubus_object *obj = req->priv;
-	struct blob_attr **attrbuf = ubus_parse_msg(msg);
 
-	if (!attrbuf[UBUS_ATTR_OBJID]) {
+	if (!req->attrbuf[UBUS_ATTR_OBJID]) {
 		printf("no object id returned!\n"); 
 		return;
 	}
 
-	obj->id = blob_attr_get_u32(attrbuf[UBUS_ATTR_OBJID]);
+	obj->id = blob_attr_get_u32(req->attrbuf[UBUS_ATTR_OBJID]);
 	
 	printf("added object id %d\n", obj->id); 
 
-	if (attrbuf[UBUS_ATTR_OBJTYPE]) {
-		obj->type->id = blob_attr_get_u32(attrbuf[UBUS_ATTR_OBJTYPE]);
+	if (req->attrbuf[UBUS_ATTR_OBJTYPE]) {
+		obj->type->id = blob_attr_get_u32(req->attrbuf[UBUS_ATTR_OBJTYPE]);
 	}  else {
 		printf("no type returned!\n"); 
 	}
@@ -218,8 +215,6 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj){
 		}
 	}
 	
-	blob_buf_dump(&ctx->buf); 
-	
 	if (ubus_start_request(ctx, &req, blob_buf_head(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_ADD_OBJECT, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
@@ -238,14 +233,13 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj){
 static void ubus_remove_object_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
 	struct ubus_object *obj = req->priv;
-	struct blob_attr **attrbuf = ubus_parse_msg(msg);
 
-	if (!attrbuf[UBUS_ATTR_OBJID])
+	if (!req->attrbuf[UBUS_ATTR_OBJID])
 		return;
 
 	obj->id = 0;
 
-	if (attrbuf[UBUS_ATTR_OBJTYPE] && obj->type)
+	if (req->attrbuf[UBUS_ATTR_OBJTYPE] && obj->type)
 		obj->type->id = 0;
 
 	avl_delete(&req->ctx->objects, &obj->avl);

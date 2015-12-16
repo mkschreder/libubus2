@@ -297,24 +297,15 @@ int ubus_notify(struct ubus_context *ctx, struct ubus_object *obj,
 	return ubus_complete_request(ctx, &req.req, timeout);
 }
 
-
-
-static bool _ubus_header_get_status(struct ubus_msghdr_buf *buf, int *ret){
-	struct blob_attr **attrbuf = ubus_parse_msg(buf->data);
-
-	if (!attrbuf[UBUS_ATTR_STATUS])
-		return false;
-
-	*ret = blob_attr_get_u32(attrbuf[UBUS_ATTR_STATUS]);
-	return true;
-}
-
 static int _ubus_process_req_status(struct ubus_request *req, struct ubus_msghdr_buf *buf){
 	int ret = UBUS_STATUS_INVALID_ARGUMENT;
 
-	if(!_ubus_header_get_status(buf, &ret)){
+	if(!req->attrbuf[UBUS_ATTR_STATUS]){
 		printf("could not get status from header!\n"); 
+	} else {
+		ret = blob_attr_get_i32(req->attrbuf[UBUS_ATTR_STATUS]); 
 	}
+
 	req->peer = buf->hdr.peer;
 	ubus_request_set_status(req, ret);
 
@@ -323,20 +314,17 @@ static int _ubus_process_req_status(struct ubus_request *req, struct ubus_msghdr
 
 static void _ubus_process_notify_status(struct ubus_request *req, int id, struct ubus_msghdr_buf *buf){
 	struct ubus_notify_request *nreq;
-	struct blob_attr **tb;
 	struct blob_attr *cur;
 	int idx = 1;
-	int ret = 0;
 
 	nreq = container_of(req, struct ubus_notify_request, req);
 	nreq->pending &= ~(1 << id);
 
 	if (!id) {
 		/* first id: ubusd's status message with a list of ids */
-		tb = ubus_parse_msg(buf->data);
-		if (tb[UBUS_ATTR_SUBSCRIBERS]) {
+		if (req->attrbuf[UBUS_ATTR_SUBSCRIBERS]) {
 			//blob_buf_for_each_attr(cur, tb[UBUS_ATTR_SUBSCRIBERS], rem) {
-			for(cur = blob_attr_first_child(tb[UBUS_ATTR_SUBSCRIBERS]); cur; cur = blob_attr_next_child(tb[UBUS_ATTR_SUBSCRIBERS], cur)){
+			for(cur = blob_attr_first_child(req->attrbuf[UBUS_ATTR_SUBSCRIBERS]); cur; cur = blob_attr_next_child(req->attrbuf[UBUS_ATTR_SUBSCRIBERS], cur)){
 				if (!blob_attr_check_type(blob_attr_data(cur), blob_attr_len(cur), BLOB_ATTR_INT32))
 					continue;
 
@@ -349,27 +337,23 @@ static void _ubus_process_notify_status(struct ubus_request *req, int id, struct
 			}
 		}
 	} else {
-		_ubus_header_get_status(buf, &ret);
+		int status = blob_attr_get_i32(req->attrbuf[UBUS_ATTR_STATUS]); 
 		if (nreq->status_cb)
-			nreq->status_cb(nreq, id, ret);
+			nreq->status_cb(nreq, id, status);
 	}
 
 	if (!nreq->pending)
 		ubus_request_set_status(req, 0);
 }
 
-static void req_data_cb(struct ubus_request *req, int type, struct blob_attr *data)
-{
-	struct blob_attr **attr;
-
+static void req_data_cb(struct ubus_request *req, int type, struct blob_attr *data){
 	if (req->raw_data_cb)
 		req->raw_data_cb(req, type, data);
 
 	if (!req->data_cb)
 		return;
 
-	attr = ubus_parse_msg(data);
-	req->data_cb(req, type, attr[UBUS_ATTR_DATA]);
+	req->data_cb(req, type, req->attrbuf[UBUS_ATTR_DATA]);
 }
 
 static void __ubus_process_req_data(struct ubus_request *req){
@@ -424,19 +408,21 @@ static void _ubus_process_req_data(struct ubus_request *req, struct ubus_msghdr_
 }
 
 
-void __hidden _ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd){
+void __hidden _ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd, struct blob_attr **attrbuf){
 	struct ubus_msghdr *hdr = &buf->hdr;
 	struct ubus_request *req;
 	int id = -1;
 
+	req = ubus_find_request(ctx, hdr->seq, hdr->peer, &id);
+	
+	printf("got status msg %d %p\n", id,  req); 
+	if (!req)
+		return;
+
+	memcpy(req->attrbuf, attrbuf, sizeof(attrbuf) * UBUS_ATTR_MAX); 
+
 	switch(hdr->type) {
 	case UBUS_MSG_STATUS:
-		req = ubus_find_request(ctx, hdr->seq, hdr->peer, &id);
-		
-		printf("got status msg %d %p\n", id,  req); 
-		if (!req)
-			break;
-
 		if (fd >= 0) {
 			if (req->fd_cb)
 				req->fd_cb(req, fd);
@@ -485,13 +471,13 @@ void ubus_abort_request(struct ubus_context *ctx, struct ubus_request *req)
 	list_del_init(&req->list);
 }
 
-void ubus_complete_request_async(struct ubus_context *ctx, struct ubus_request *req)
-{
+void ubus_complete_request_async(struct ubus_context *ctx, struct ubus_request *req){
 	if (!list_empty(&req->list))
 		return;
 
 	list_add(&req->list, &ctx->requests);
 }
+
 void ubus_request_set_status(struct ubus_request *req, int ret){
 	if (!list_empty(&req->list))
 		list_del_init(&req->list);
@@ -502,14 +488,58 @@ void ubus_request_set_status(struct ubus_request *req, int ret){
 		ubus_req_complete_cb(req);
 }
 
+void ubus_message_parse(int type, struct blob_attr *msg, struct blob_attr **attrbuf){
+	struct blob_attr *head = msg; 
+	struct blob_attr *attr = NULL; 	
+	switch(type) {
+		case UBUS_MSG_HELLO: 
+			attrbuf[UBUS_ATTR_OBJID] = attr = blob_attr_first_child(head); 
+			break; 
+		case UBUS_MSG_STATUS:
+			attrbuf[UBUS_ATTR_STATUS] = attr = blob_attr_first_child(head); 	
+			//attrbuf[UBUS_ATTR_OBJID] = attr = blob_attr_next_child(head, attr); 
+			break; 
+		case UBUS_MSG_DATA:
+			attrbuf[UBUS_ATTR_OBJID] = attr = blob_attr_first_child(head); 
+			attrbuf[UBUS_ATTR_DATA] = attr = blob_attr_next_child(head, attr); 
+			break;
+		case UBUS_MSG_PING: 
+			break; 
+		case UBUS_MSG_LOOKUP: 
+			attrbuf[UBUS_ATTR_OBJPATH] = attr = blob_attr_first_child(head); 		
+			break; 	
+		case UBUS_MSG_INVOKE:
+			attrbuf[UBUS_ATTR_OBJID] = attr = blob_attr_first_child(head);  
+			attrbuf[UBUS_ATTR_METHOD] = attr = blob_attr_next_child(head, attr);  
+			attrbuf[UBUS_ATTR_DATA] = attr = blob_attr_next_child(head, attr); 
+			break; 
+		case UBUS_MSG_ADD_OBJECT: 
+			attrbuf[UBUS_ATTR_OBJPATH] = attr = blob_attr_first_child(head); 
+			attrbuf[UBUS_ATTR_SIGNATURE] = attr = blob_attr_next_child(head, attr); 
+			break; 
+		case UBUS_MSG_REMOVE_OBJECT: 
+			break; 
+		case UBUS_MSG_SUBSCRIBE: 
+		case UBUS_MSG_UNSUBSCRIBE:
+		case UBUS_MSG_NOTIFY:
+			break;
+	}
+}
 
 void __hidden ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd){
+	struct blob_attr *attrbuf[UBUS_ATTR_MAX];
+	memset(attrbuf, 0, sizeof(attrbuf)); 
+	printf("ubus process message\n"); 
+	
+	blob_attr_dump(buf->data); 
+
+	ubus_message_parse(buf->hdr.type, buf->data, attrbuf); 
+
 	switch(buf->hdr.type) {
 	case UBUS_MSG_STATUS:
 	case UBUS_MSG_DATA:
-		_ubus_process_req_msg(ctx, buf, fd);
+		_ubus_process_req_msg(ctx, buf, fd, attrbuf);
 		break;
-
 	case UBUS_MSG_INVOKE:
 	case UBUS_MSG_UNSUBSCRIBE:
 	case UBUS_MSG_NOTIFY:
@@ -519,7 +549,7 @@ void __hidden ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf 
 			break;
 		}
 
-		ubus_process_obj_msg(ctx, buf);
+		ubus_process_obj_msg(ctx, buf, attrbuf);
 		break;
 	}
 }
@@ -532,20 +562,35 @@ static void ubus_lookup_cb(struct ubus_request *ureq, int type, struct blob_attr
 {
 	struct ubus_lookup_request *req;
 	struct ubus_object_data obj;
-	struct blob_attr **attr;
 
 	req = container_of(ureq, struct ubus_lookup_request, req);
-	attr = ubus_parse_msg(msg);
 
-	if (!attr[UBUS_ATTR_OBJID] || !attr[UBUS_ATTR_OBJPATH] ||
-	    !attr[UBUS_ATTR_OBJTYPE])
-		return;
+	printf("got lookup response\n"); 
+	blob_attr_dump(msg); 
+	
+	msg = blob_attr_first_child(msg); 
 
 	memset(&obj, 0, sizeof(obj));
-	obj.id = blob_attr_get_u32(attr[UBUS_ATTR_OBJID]);
-	obj.path = blob_attr_data(attr[UBUS_ATTR_OBJPATH]);
-	obj.type_id = blob_attr_get_u32(attr[UBUS_ATTR_OBJTYPE]);
-	obj.signature = attr[UBUS_ATTR_SIGNATURE];
+	
+	for(struct blob_attr *attr = blob_attr_first_child(msg); attr; attr = blob_attr_next_child(msg, attr)){
+		const char *key = blob_attr_get_string(attr); attr = blob_attr_next_child(msg, attr); 
+		if(strcmp(key, "id") == 0)	
+			obj.id = blob_attr_get_u32(attr);
+		else if(strcmp(key, "path") == 0)
+			obj.path = blob_attr_get_string(attr); 
+		else if(strcmp(key, "type") == 0)
+			obj.type_id = blob_attr_get_u32(attr); 
+		else if(strcmp(key, "methods") == 0)
+			obj.signature = attr; 
+		else if(strcmp(key, "client") == 0)
+			obj.client_id = blob_attr_get_u32(attr); 
+	}
+	if(!obj.id || !obj.path || !obj.type_id){
+		return; 
+	}
+	//obj.path = blob_attr_data(ureq->attrbuf[UBUS_ATTR_OBJPATH]);
+	//obj.type_id = blob_attr_get_u32(ureq->attrbuf[UBUS_ATTR_OBJTYPE]);
+	//obj.signature = ureq->attrbuf[UBUS_ATTR_SIGNATURE];
 	req->cb(ureq->ctx, &obj, ureq->priv);
 }
 
@@ -569,15 +614,12 @@ int ubus_lookup(struct ubus_context *ctx, const char *path,
 
 static void ubus_lookup_id_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
-	struct blob_attr **attr;
 	uint32_t *id = req->priv;
 
-	attr = ubus_parse_msg(msg);
+	struct blob_attr *head = blob_attr_first_child(msg); 
+	struct blob_attr *attr = blob_attr_next_child(head, blob_attr_first_child(head)); 
 
-	if (!attr[UBUS_ATTR_OBJID])
-		return;
-
-	*id = blob_attr_get_u32(attr[UBUS_ATTR_OBJID]);
+	*id = blob_attr_get_u32(attr);
 }
 
 int ubus_lookup_id(struct ubus_context *ctx, const char *path, uint32_t *id)

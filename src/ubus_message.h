@@ -116,4 +116,6 @@ struct ubus_msghdr_buf {
 	struct blob_attr *data;
 };
 
+void ubus_message_parse(int type, struct blob_attr *msg, struct blob_attr **attrbuf); 
+
 #endif

@@ -4,6 +4,7 @@
 #include <blobpack/blobpack.h>
 
 #include "ubus_object.h"
+#include "ubus_message.h"
 
 struct ubus_request_data {
 	uint32_t object;
@@ -34,6 +35,8 @@ struct ubus_request {
 	bool blocked;
 	bool cancelled;
 	bool notify;
+
+	struct blob_attr *attrbuf[UBUS_ATTR_MAX]; 
 
 	uint32_t peer;
 	uint16_t seq;

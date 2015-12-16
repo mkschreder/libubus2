@@ -29,7 +29,7 @@
 #define STATIC_IOV(_var) { .iov_base = (char *) &(_var), .iov_len = sizeof(_var) }
 
 #define UBUS_MSGBUF_REDUCTION_INTERVAL	16
-
+/*
 static const struct blob_attr_policy ubus_policy[UBUS_ATTR_MAX] = {
 	[UBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
 	[UBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
@@ -40,14 +40,12 @@ static const struct blob_attr_policy ubus_policy[UBUS_ATTR_MAX] = {
 	[UBUS_ATTR_SUBSCRIBERS] = { .type = BLOB_ATTR_ARRAY },
 };
 
-static struct blob_attr *attrbuf[UBUS_ATTR_MAX];
-
-__hidden struct blob_attr **ubus_parse_msg(struct blob_attr *msg)
-{
+__hidden struct blob_attr **ubus_parse_msg(struct blob_attr *msg){
+	
 	blob_attr_parse(msg, attrbuf, ubus_policy, UBUS_ATTR_MAX);
 	return attrbuf;
 }
-
+*/
 static void wait_data(int fd, bool write)
 {
 	struct pollfd pfd = { .fd = fd };
