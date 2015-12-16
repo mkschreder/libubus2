@@ -14,8 +14,8 @@
 #ifndef __LIBUBUS_IO_H
 #define __LIBUBUS_IO_H
 
-extern struct blob_buf b;
-extern const struct ubus_method watch_method;
+//extern struct blob_buf b;
+//extern const struct ubus_method watch_method;
 
 struct ubus_pending_msg {
 	struct list_head list;

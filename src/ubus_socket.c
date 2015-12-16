@@ -30,14 +30,14 @@
 
 #define UBUS_MSGBUF_REDUCTION_INTERVAL	16
 
-static const struct blob_attr_info ubus_policy[UBUS_ATTR_MAX] = {
+static const struct blob_attr_policy ubus_policy[UBUS_ATTR_MAX] = {
 	[UBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
 	[UBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
 	[UBUS_ATTR_OBJPATH] = { .type = BLOB_ATTR_STRING },
 	[UBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
 	[UBUS_ATTR_ACTIVE] = { .type = BLOB_ATTR_INT8 },
 	[UBUS_ATTR_NO_REPLY] = { .type = BLOB_ATTR_INT8 },
-	[UBUS_ATTR_SUBSCRIBERS] = { .type = BLOB_ATTR_NESTED },
+	[UBUS_ATTR_SUBSCRIBERS] = { .type = BLOB_ATTR_ARRAY },
 };
 
 static struct blob_attr *attrbuf[UBUS_ATTR_MAX];
@@ -139,7 +139,7 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 
 	if (!msg) {
 		blob_buf_reset(&ctx->buf);
-		msg = blob_buf_data(&ctx->buf);
+		msg = blob_buf_head(&ctx->buf);
 	}
 
 	iov[1].iov_base = (char *) msg;

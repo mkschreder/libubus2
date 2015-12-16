@@ -67,7 +67,7 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	}
 
 	if (attrbuf[UBUS_ATTR_NO_REPLY])
-		no_reply = blob_attr_get_int8(attrbuf[UBUS_ATTR_NO_REPLY]);
+		no_reply = blob_attr_get_i8(attrbuf[UBUS_ATTR_NO_REPLY]);
 
 	req.peer = hdr->peer;
 	req.seq = hdr->seq;
@@ -168,16 +168,17 @@ static void ubus_push_method_data(struct ubus_context *ctx, const struct ubus_me
 	void *mtbl;
 	int i;
 
-	mtbl = blobmsg_open_table(&ctx->buf, m->name);
+	blob_buf_put_string(&ctx->buf, m->name); 
+	mtbl = blob_buf_open_table(&ctx->buf);
 
 	for (i = 0; i < m->n_policy; i++) {
 		if (m->mask && !(m->mask & (1 << i)))
 			continue;
-
-		blobmsg_add_u32(&ctx->buf, m->policy[i].name, m->policy[i].type);
+		blob_buf_put_string(&ctx->buf, m->policy[i].name); 
+		blob_buf_put_u32(&ctx->buf, m->policy[i].type);
 	}
 
-	blobmsg_close_table(&ctx->buf, mtbl);
+	blob_buf_close_table(&ctx->buf, mtbl);
 }
 
 static bool ubus_push_object_type(struct ubus_context *ctx, const struct ubus_object_type *type)
@@ -185,12 +186,12 @@ static bool ubus_push_object_type(struct ubus_context *ctx, const struct ubus_ob
 	void *s;
 	int i;
 
-	s = blob_buf_nest_start(&ctx->buf, UBUS_ATTR_SIGNATURE);
+	s = blob_buf_open_table(&ctx->buf);
 
 	for (i = 0; i < type->n_methods; i++)
 		ubus_push_method_data(ctx, &type->methods[i]);
 
-	blob_buf_nest_end(&ctx->buf, s);
+	blob_buf_close_table(&ctx->buf, s);
 
 	return true;
 }
@@ -204,11 +205,11 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj){
 	blob_buf_reset(&ctx->buf);
 
 	if (obj->name && obj->type) {
-		blob_buf_put_string(&ctx->buf, UBUS_ATTR_OBJPATH, obj->name);
+		blob_buf_put_string(&ctx->buf, obj->name);
 
 		if (obj->type->id){
 			printf("pushing known id %x\n", obj->type->id); 
-			blob_buf_put_int32(&ctx->buf, UBUS_ATTR_OBJTYPE, obj->type->id);
+			blob_buf_put_i32(&ctx->buf, obj->type->id);
 		} 
 		else {
 			printf("pushing signature\n"); 
@@ -219,7 +220,7 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj){
 	
 	blob_buf_dump(&ctx->buf); 
 	
-	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_ADD_OBJECT, 0) < 0)
+	if (ubus_start_request(ctx, &req, blob_buf_head(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_ADD_OBJECT, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	req.raw_data_cb = ubus_add_object_cb;
@@ -256,9 +257,9 @@ int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 	int ret;
 
 	blob_buf_reset(&ctx->buf);
-	blob_buf_put_int32(&ctx->buf, UBUS_ATTR_OBJID, obj->id);
+	blob_buf_put_i32(&ctx->buf, obj->id);
 
-	if (ubus_start_request(ctx, &req, blob_buf_data(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_REMOVE_OBJECT, 0) < 0)
+	if (ubus_start_request(ctx, &req, blob_buf_head(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_REMOVE_OBJECT, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
 	req.raw_data_cb = ubus_remove_object_cb;

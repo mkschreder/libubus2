@@ -11,6 +11,8 @@ SOURCE=\
 	src/ubus_subscriber.c \
 	src/libubus2.c 
 
+INSTALL_PREFIX:=/usr
+
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
 CFLAGS+=-Isrc -Wall -Werror -std=gnu99

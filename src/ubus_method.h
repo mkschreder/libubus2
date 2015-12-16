@@ -7,7 +7,7 @@ struct ubus_method {
 	ubus_request_handler_t handler;
 
 	unsigned long mask;
-	const struct blobmsg_policy *policy;
+	const struct blob_attr_policy *policy;
 	int n_policy;
 };
 
