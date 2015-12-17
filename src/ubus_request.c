@@ -14,3 +14,14 @@
 #include <unistd.h>
 #include "libubus2.h"
 
+struct ubus_request *ubus_request_new(void){
+	struct ubus_request *req = calloc(1, sizeof(struct ubus_request)); 
+	return req; 
+}
+
+void ubus_request_delete(struct ubus_request **self){
+	free(*self); 
+	*self = 0; 
+}
+
+

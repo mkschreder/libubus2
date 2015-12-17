@@ -50,5 +50,8 @@ struct ubus_request {
 	void *priv;
 };
 
+struct ubus_request *ubus_request_new(void); 
+void ubus_request_delete(struct ubus_request **self); 
+
 void ubus_request_set_status(struct ubus_request *req, int ret); 
 

@@ -72,7 +72,7 @@ enum ubus_msg_type {
 	__UBUS_MSG_LAST,
 };
 
-static const char *ubus_message_types[] = {
+static __attribute__((unused)) const char *ubus_message_types[] = {
 	"UBUS_MSG_HELLO",
 	"UBUS_MSG_STATUS",
 	"UBUS_MSG_DATA",
