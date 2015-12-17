@@ -15,6 +15,26 @@
 
 #include "ubus_context.h"
 
+struct ubus_object *ubus_object_new(){
+	struct ubus_object *self = malloc(sizeof(struct ubus_object)); 
+	ubus_object_init(self); 
+	return self; 
+}
+
+void ubus_object_delete(struct ubus_object **self){
+	ubus_object_destroy(*self); 
+	free(*self); 
+	*self = NULL; 
+}
+
+void ubus_object_init(struct ubus_object *self){
+	memset(self, 0, sizeof(*self)); 
+}
+
+void ubus_object_destroy(struct ubus_object *self){
+	// TODO
+}
+
 static void
 ubus_process_unsubscribe(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 			 struct ubus_object *obj, struct blob_attr **attrbuf)
@@ -102,6 +122,10 @@ void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_
 	struct ubus_object *obj;
 	uint32_t objid;
 	void *prev_data = NULL;
+	
+	assert(ctx); 
+	assert(buf); 
+	assert(attrbuf); 
 
 	if (!attrbuf[UBUS_ATTR_OBJID])
 		return;
@@ -143,19 +167,14 @@ static void ubus_add_object_cb(struct ubus_request *req, int type, struct blob_a
 	struct ubus_object *obj = req->priv;
 
 	if (!req->attrbuf[UBUS_ATTR_OBJID]) {
-		printf("no object id returned!\n"); 
 		return;
 	}
 
 	obj->id = blob_attr_get_u32(req->attrbuf[UBUS_ATTR_OBJID]);
-	
-	printf("added object id %d\n", obj->id); 
 
 	if (req->attrbuf[UBUS_ATTR_OBJTYPE]) {
 		obj->type->id = blob_attr_get_u32(req->attrbuf[UBUS_ATTR_OBJTYPE]);
-	}  else {
-		printf("no type returned!\n"); 
-	}
+	} 
 	obj->avl.key = &obj->id;
 	avl_insert(&req->ctx->objects, &obj->avl);
 }
@@ -205,11 +224,9 @@ int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj){
 		blob_buf_put_string(&ctx->buf, obj->name);
 
 		if (obj->type->id){
-			printf("pushing known id %x\n", obj->type->id); 
 			blob_buf_put_i32(&ctx->buf, obj->type->id);
 		} 
 		else {
-			printf("pushing signature\n"); 
 			if (!ubus_push_object_type(ctx, obj->type))
 				return UBUS_STATUS_INVALID_ARGUMENT;
 		}

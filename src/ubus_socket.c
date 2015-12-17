@@ -128,8 +128,6 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	};
 	int ret;
 
-	printf("send msg %d %d %d\n", cmd, seq, peer); 
-
 	hdr.version = 0;
 	hdr.type = cmd;
 	hdr.seq = seq;

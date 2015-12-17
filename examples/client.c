@@ -42,12 +42,11 @@ int main(int argc, char **argv)
 
 	printf("connected as %08x\n", ctx->local_id);
 	
-static struct ubus_method test_object_methods[] = {
-	UBUS_METHOD_NOARG("foo", test_method)
-};
+	static struct ubus_method test_object_methods[] = {
+		UBUS_METHOD_NOARG("foo", test_method)
+	};
 
-static struct ubus_object_type test_object_type =
-	UBUS_OBJECT_TYPE("test-type", test_object_methods);
+	static struct ubus_object_type test_object_type = UBUS_OBJECT_TYPE("test-type", test_object_methods);
 	static struct ubus_object test_object = {
 		.name = "test",
 		.type = &test_object_type,

@@ -192,6 +192,8 @@ int ubus_send_reply(struct ubus_context *ctx, struct ubus_request_data *req,
 
 	blob_buf_reset(&ctx->buf);
 	blob_buf_put_i32(&ctx->buf, req->object); // objid
+	// force table for replies
+	//blob_attr_set_type(msg, BLOB_ATTR_TABLE); 
 	blob_buf_put_attr(&ctx->buf, msg); 
 	ret = ubus_send_msg(ctx, req->seq, blob_buf_head(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_DATA, req->peer, -1);
 	if (ret < 0)
@@ -206,9 +208,11 @@ int ubus_invoke_async(struct ubus_context *ctx, uint32_t obj, const char *method
 	blob_buf_reset(&ctx->buf);
 	blob_buf_put_i32(&ctx->buf, obj);
 	blob_buf_put_string(&ctx->buf, method);
-	if (msg)
+	if (msg){
+		// force table for outgoing arguments
+		//blob_attr_set_type(msg, BLOB_ATTR_TABLE); 
 		blob_buf_put_attr(&ctx->buf, msg);
-
+	}
 	if (ubus_start_request(ctx, req, blob_buf_head(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_INVOKE, obj) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;
 
@@ -300,9 +304,7 @@ int ubus_notify(struct ubus_context *ctx, struct ubus_object *obj,
 static int _ubus_process_req_status(struct ubus_request *req, struct ubus_msghdr_buf *buf){
 	int ret = UBUS_STATUS_INVALID_ARGUMENT;
 
-	if(!req->attrbuf[UBUS_ATTR_STATUS]){
-		printf("could not get status from header!\n"); 
-	} else {
+	if(req->attrbuf[UBUS_ATTR_STATUS]){
 		ret = blob_attr_get_i32(req->attrbuf[UBUS_ATTR_STATUS]); 
 	}
 
@@ -391,7 +393,7 @@ static void _ubus_process_req_data(struct ubus_request *req, struct ubus_msghdr_
 		__ubus_process_req_data(req);
 		req->blocked = false;
 
-		if (req->status_msg)
+		//if (req->status_msg)
 			ubus_req_complete_cb(req);
 
 		return;
@@ -415,7 +417,6 @@ void __hidden _ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr
 
 	req = ubus_find_request(ctx, hdr->seq, hdr->peer, &id);
 	
-	printf("got status msg %d %p\n", id,  req); 
 	if (!req)
 		return;
 
@@ -437,7 +438,6 @@ void __hidden _ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr
 		break;
 
 	case UBUS_MSG_DATA:
-		printf("got data\n"); 
 		req = ubus_find_request(ctx, hdr->seq, hdr->peer, &id);
 		if (req && (req->data_cb || req->raw_data_cb))
 			_ubus_process_req_data(req, buf);
@@ -529,9 +529,9 @@ void ubus_message_parse(int type, struct blob_attr *msg, struct blob_attr **attr
 void __hidden ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd){
 	struct blob_attr *attrbuf[UBUS_ATTR_MAX];
 	memset(attrbuf, 0, sizeof(attrbuf)); 
-	printf("ubus process message\n"); 
-	
-	blob_attr_dump(buf->data); 
+
+	printf("IN %s seq=%d peer=%08x: ", ubus_message_types[buf->hdr.type], buf->hdr.seq, buf->hdr.peer); 
+	blob_attr_dump_json(buf->data); 
 
 	ubus_message_parse(buf->hdr.type, buf->data, attrbuf); 
 
@@ -543,7 +543,6 @@ void __hidden ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf 
 	case UBUS_MSG_INVOKE:
 	case UBUS_MSG_UNSUBSCRIBE:
 	case UBUS_MSG_NOTIFY:
-		printf("got invoke/notify/unsubscribe\n"); 
 		if (ctx->stack_depth) {
 			ubus_queue_msg(ctx, buf);
 			break;
@@ -565,9 +564,6 @@ static void ubus_lookup_cb(struct ubus_request *ureq, int type, struct blob_attr
 
 	req = container_of(ureq, struct ubus_lookup_request, req);
 
-	printf("got lookup response\n"); 
-	blob_attr_dump(msg); 
-	
 	msg = blob_attr_first_child(msg); 
 
 	memset(&obj, 0, sizeof(obj));

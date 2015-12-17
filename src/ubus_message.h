@@ -72,6 +72,20 @@ enum ubus_msg_type {
 	__UBUS_MSG_LAST,
 };
 
+static const char *ubus_message_types[] = {
+	"UBUS_MSG_HELLO",
+	"UBUS_MSG_STATUS",
+	"UBUS_MSG_DATA",
+	"UBUS_MSG_PING",
+	"UBUS_MSG_LOOKUP",
+	"UBUS_MSG_INVOKE",
+	"UBUS_MSG_ADD_OBJECT",
+	"UBUS_MSG_REMOVE_OBJECT",
+	"UBUS_MSG_SUBSCRIBE",
+	"UBUS_MSG_UNSUBSCRIBE",
+	"UBUS_MSG_NOTIFY"
+}; 
+
 enum ubus_msg_attr {
 	UBUS_ATTR_UNSPEC,
 

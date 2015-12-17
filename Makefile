@@ -15,7 +15,7 @@ INSTALL_PREFIX:=/usr
 
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
-CFLAGS+=-Isrc -Wall -Werror -std=gnu99
+CFLAGS+=-g -Isrc -Wall -Werror -std=gnu99
 LDFLAGS+=-lblobpack -lusys -lutype -ljson-c -ldl
 
 all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) client-example threads-example

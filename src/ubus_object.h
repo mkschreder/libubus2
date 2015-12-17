@@ -18,6 +18,8 @@ struct ubus_object {
 
 	struct ubus_method *methods;
 	int n_methods;
+
+	void *priv; // private data to attach to owner of the object 
 };
 
 struct ubus_object_data {
@@ -27,6 +29,9 @@ struct ubus_object_data {
 	const char *path;
 	struct blob_attr *signature;
 };
+
+struct ubus_object *ubus_object_new(); 
+void ubus_object_delete(struct ubus_object **obj); 
 
 void ubus_object_init(struct ubus_object *obj); 
 void ubus_object_destroy(struct ubus_object *obj);
