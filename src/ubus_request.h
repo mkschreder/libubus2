@@ -22,9 +22,6 @@ typedef void (*ubus_data_handler_t)(struct ubus_request *req,
 				    int type, struct blob_attr *msg);
 typedef void (*ubus_fd_handler_t)(struct ubus_request *req, int fd);
 typedef void (*ubus_complete_handler_t)(struct ubus_request *req, int ret);
-typedef int (*ubus_request_handler_t)(struct ubus_context *ctx, struct ubus_object *obj,
-			      struct ubus_request_data *req,
-			      const char *method, struct blob_attr *msg);
 
 struct ubus_request {
 	struct list_head list;

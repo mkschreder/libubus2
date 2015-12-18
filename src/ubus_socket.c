@@ -301,9 +301,9 @@ static void ubus_refresh_state(struct ubus_context *ctx){
 	int n, i = 0;
 
 	/* clear all type IDs, they need to be registered again */
-	avl_for_each_element(&ctx->objects, obj, avl)
-		if (obj->type)
-			obj->type->id = 0;
+	//avl_for_each_element(&ctx->objects, obj, avl)
+//		if (obj->type)
+//			obj->type->id = 0;
 
 	/* push out all objects again */
 	objs = alloca(ctx->objects.count * sizeof(*objs));

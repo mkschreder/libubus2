@@ -6,6 +6,7 @@ SOURCE=\
 	src/ubus_method.c \
 	src/ubus_object.c \
 	src/ubus_object_type.c \
+	src/ubus_method.c \
 	src/ubus_request.c \
 	src/ubus_socket.c \
 	src/ubus_subscriber.c \

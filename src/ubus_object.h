@@ -3,6 +3,7 @@
 #include <libutype/avl.h>
 
 struct ubus_context; 
+struct ubus_method; 
 
 struct ubus_object {
 	struct avl_node avl;
@@ -10,14 +11,16 @@ struct ubus_object {
 	char *name;
 	uint32_t id;
 
-	char *path;
-	struct ubus_object_type *type;
+	//char *path;
+	//struct ubus_object_type *type;
 
 	void (*subscribe_cb)(struct ubus_context *ctx, struct ubus_object *obj);
 	bool has_subscribers;
 
-	struct ubus_method *methods;
-	int n_methods;
+	struct list_head methods; 
+
+	//struct ubus_method *methods;
+	//int n_methods;
 
 	void *priv; // private data to attach to owner of the object 
 };
@@ -30,11 +33,14 @@ struct ubus_object_data {
 	struct blob_attr *signature;
 };
 
-struct ubus_object *ubus_object_new(); 
+struct ubus_object *ubus_object_new(const char *name); 
 void ubus_object_delete(struct ubus_object **obj); 
 
-void ubus_object_init(struct ubus_object *obj); 
+void ubus_object_init(struct ubus_object *obj, const char *name); 
 void ubus_object_destroy(struct ubus_object *obj);
+
+void ubus_object_add_method(struct ubus_object *obj, struct ubus_method **method); 
+void ubus_object_publish_method(struct ubus_object *obj, struct ubus_method **method); 
 
 typedef void (*ubus_lookup_handler_t)(struct ubus_context *ctx,
 				      struct ubus_object_data *obj,

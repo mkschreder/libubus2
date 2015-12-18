@@ -27,8 +27,8 @@ static __attribute__((unused)) int test_method(struct ubus_context *ctx, struct 
 	ubus_send_reply(ctx, req, blob_buf_head(&bb));
 	return 0;
 }
-int main(int argc, char **argv)
-{
+
+int main(int argc, char **argv){
 	struct ubus_context *ctx = ubus_new(); 
 	if(argc == 2) {
 		printf("connecting to %s..\n", argv[1]); 
@@ -42,6 +42,18 @@ int main(int argc, char **argv)
 
 	printf("connected as %08x\n", ctx->local_id);
 	
+	struct ubus_object *obj = ubus_object_new("/path/to/object"); 
+	struct ubus_method *method = ubus_method_new("my.object.test", test_method); 
+	ubus_method_add_param(method, "name_int", "i"); 
+	ubus_method_add_param(method, "name_string", "ai"); 
+	ubus_method_add_param(method, "name_table", "a{sv}"); 
+	ubus_method_add_return(method, "some_return", "i"); 
+	ubus_method_add_return(method, "some_table", "a{sv}"); // returns a dictionary
+ 	
+	ubus_object_add_method(obj, &method); 
+	//ubus_add_object(ctx, &obj); 
+	ubus_publish_object(ctx, &obj); 
+/*
 	static struct ubus_method test_object_methods[] = {
 		UBUS_METHOD_NOARG("foo", test_method)
 	};
@@ -54,9 +66,8 @@ int main(int argc, char **argv)
 		.n_methods = ARRAY_SIZE(test_object_methods),
 	};
 
-
 	ubus_add_object(ctx, &test_object);
-	
+*/	
 	printf("waiting for response!\n"); 
 	while(true){
 		ubus_handle_event(ctx); 

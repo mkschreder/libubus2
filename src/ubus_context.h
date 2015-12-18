@@ -113,6 +113,7 @@ int ubus_lookup_id(struct ubus_context *ctx, const char *path, uint32_t *id);
 
 /* make an object visible to remote connections */
 int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj);
+int ubus_publish_object(struct ubus_context *ctx, struct ubus_object **obj);
 
 /* remove the object from the ubus connection */
 int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj);

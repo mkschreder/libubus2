@@ -14,6 +14,7 @@
 #include "ubus_socket.h"
 
 void ubus_init(struct ubus_context *self){
+	assert(self); 
 	memset(self, 0, sizeof(*self)); 	
 	self->uloop = uloop_new(); 
 	uloop_add_fd(self->uloop, &self->sock, ULOOP_BLOCKING | ULOOP_READ);
@@ -634,7 +635,7 @@ int ubus_lookup_id(struct ubus_context *ctx, const char *path, uint32_t *id)
 
 	return ubus_complete_request(ctx, &req, 0);
 }
-
+/*
 static int ubus_event_cb(struct ubus_context *ctx, struct ubus_object *obj,
 			 struct ubus_request_data *req,
 			 const char *method, struct blob_attr *msg)
@@ -645,7 +646,7 @@ static int ubus_event_cb(struct ubus_context *ctx, struct ubus_object *obj,
 	ev->cb(ctx, ev, method, msg);
 	return 0;
 }
-
+*/
 int ubus_register_event_handler(struct ubus_context *ctx,
 				struct ubus_event_handler *ev,
 				const char *pattern){
@@ -656,13 +657,13 @@ int ubus_register_event_handler(struct ubus_context *ctx,
 	int ret;
 
 	if (!obj->id) {
-		obj->methods = calloc(1, sizeof(struct ubus_method)); 
-		ubus_method_init(obj->methods, NULL, ubus_event_cb); 
+		//obj->methods = calloc(1, sizeof(struct ubus_method)); 
+		//ubus_method_init(obj->methods, NULL, ubus_event_cb); 
 
-		obj->n_methods = 1;
+		//obj->n_methods = 1;
 
-		if (!!obj->name ^ !!obj->type)
-			return UBUS_STATUS_INVALID_ARGUMENT;
+		//if (!!obj->name ^ !!obj->type)
+	//		return UBUS_STATUS_INVALID_ARGUMENT;
 
 		ret = ubus_add_object(ctx, obj);
 		if (ret)

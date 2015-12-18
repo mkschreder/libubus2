@@ -34,8 +34,8 @@ int ubus_register_subscriber(struct ubus_context *ctx, struct ubus_subscriber *s
 	ubus_method_init(watch, NULL, ubus_subscriber_cb); 
 
 	s->watch_method = watch; 
-	obj->methods = watch;
-	obj->n_methods = 1;
+	//obj->methods = watch;
+	//obj->n_methods = 1;
 
 	return ubus_add_object(ctx, obj);
 }

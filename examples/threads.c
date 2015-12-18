@@ -23,35 +23,24 @@ static int test_method(struct ubus_context *ctx, struct ubus_object *obj,
 	return 0;
 }
 
-static struct ubus_method test_object_methods[] = {
-	UBUS_METHOD_NOARG("test", test_method)
-};
-
-static struct ubus_object_type test_object_type =
-	UBUS_OBJECT_TYPE("test-type", test_object_methods);
-
 void* client_thread(void *args){
 	struct ubus_context *ctx = ubus_new(); 
-	
-	struct ubus_object test_object = {
-		.name = args,
-		.type = &test_object_type,
-		.methods = test_object_methods,
-		.n_methods = ARRAY_SIZE(test_object_methods),
-	};
-
-	if(!ctx){
-		fprintf(stderr, "no memory!\n"); 
-		return 0; 
-	}
-	assert(ctx->buf.buf); 
+		
 	if(ubus_connect(ctx, "test.sock") < 0){
 		printf("Error connecting to ubus socket!\n"); 
 		return 0; 
 	}
 
-	assert(ctx->buf.buf); 
-	ubus_add_object(ctx, &test_object); 
+	struct ubus_object *obj = ubus_object_new("test"); 
+	struct ubus_method *method = ubus_method_new("my.object.test", test_method); 
+	ubus_method_add_param(method, "name_int", "i"); 
+	ubus_method_add_param(method, "name_string", "ai"); 
+	ubus_method_add_param(method, "name_table", "a{sv}"); 
+	ubus_method_add_return(method, "some_return", "i"); 
+	ubus_method_add_return(method, "some_table", "a{sv}"); // returns a dictionary
+	
+	ubus_object_add_method(obj, &method); 
+	ubus_publish_object(ctx, &obj); 
 
 	while(true){
 		ubus_handle_event(ctx); 
