@@ -43,7 +43,7 @@ int ubus_register_subscriber(struct ubus_context *ctx, struct ubus_subscriber *s
 int ubus_unregister_subscriber(struct ubus_context *ctx, struct ubus_subscriber *obj){
 	return ubus_remove_object(ctx, &obj->obj);
 }
-
+/*
 static int
 __ubus_subscribe_request(struct ubus_context *ctx, struct ubus_object *obj, uint32_t id, int type){
 	struct ubus_request req;
@@ -66,4 +66,4 @@ int ubus_subscribe(struct ubus_context *ctx, struct ubus_subscriber *obj, uint32
 int ubus_unsubscribe(struct ubus_context *ctx, struct ubus_subscriber *obj, uint32_t id){
 	return __ubus_subscribe_request(ctx, &obj->obj, id, UBUS_MSG_UNSUBSCRIBE);
 }
-
+*/

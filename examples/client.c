@@ -40,7 +40,7 @@ int main(int argc, char **argv){
 		}
 	}
 
-	printf("connected as %08x\n", ctx->local_id);
+	//printf("connected as %08x\n", ctx->local_id);
 	
 	struct ubus_object *obj = ubus_object_new("/path/to/object"); 
 	struct ubus_method *method = ubus_method_new("my.object.test", test_method); 
@@ -51,28 +51,15 @@ int main(int argc, char **argv){
 	ubus_method_add_return(method, "some_table", "a{sv}"); // returns a dictionary
  	
 	ubus_object_add_method(obj, &method); 
-	//ubus_add_object(ctx, &obj); 
-	ubus_publish_object(ctx, &obj); 
-/*
-	static struct ubus_method test_object_methods[] = {
-		UBUS_METHOD_NOARG("foo", test_method)
-	};
 
-	static struct ubus_object_type test_object_type = UBUS_OBJECT_TYPE("test-type", test_object_methods);
-	static struct ubus_object test_object = {
-		.name = "test",
-		.type = &test_object_type,
-		.methods = test_object_methods,
-		.n_methods = ARRAY_SIZE(test_object_methods),
-	};
+	printf("publishing object\n"); 
 
-	ubus_add_object(ctx, &test_object);
-*/	
+	ubus_dir_publish_object(ctx, &obj); 
+
 	printf("waiting for response!\n"); 
 	while(true){
 		ubus_handle_event(ctx); 
 	}
-
 	
 	ubus_delete(&ctx);	
 

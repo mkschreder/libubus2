@@ -12,10 +12,15 @@
  */
 
 #define _GNU_SOURCE
-#include <sys/types.h>
-#include <sys/uio.h>
-#include <sys/socket.h>
 
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/uio.h>
+#ifdef FreeBSD
+#include <sys/param.h>
+#endif
+#include <signal.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -24,28 +29,248 @@
 
 #include <blobpack/blobpack.h>
 
-#include "ubus_context.h"
+#include "ubus_socket.h"
 
 #define STATIC_IOV(_var) { .iov_base = (char *) &(_var), .iov_len = sizeof(_var) }
 
 #define UBUS_MSGBUF_REDUCTION_INTERVAL	16
-/*
-static const struct blob_attr_policy ubus_policy[UBUS_ATTR_MAX] = {
-	[UBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
-	[UBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
-	[UBUS_ATTR_OBJPATH] = { .type = BLOB_ATTR_STRING },
-	[UBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
-	[UBUS_ATTR_ACTIVE] = { .type = BLOB_ATTR_INT8 },
-	[UBUS_ATTR_NO_REPLY] = { .type = BLOB_ATTR_INT8 },
-	[UBUS_ATTR_SUBSCRIBERS] = { .type = BLOB_ATTR_ARRAY },
-};
 
-__hidden struct blob_attr **ubus_parse_msg(struct blob_attr *msg){
+struct ubus_msg_header {
+	uint8_t hdr_size; 	// works as a magic. Must always be sizeof(struct ubus_msg_header)
+	uint8_t type;  		// type of request 
+	uint16_t seq;		// request sequence that is set by sender 
+	uint32_t peer;		// destination peer  
+	uint32_t data_size;	// length of the data that follows 
+} __attribute__((packed)); 
+
+struct ubus_request {
+	struct list_head list; 
+	struct ubus_msg_header hdr; 
+	struct blob_buf data; 
+
+	int send_count; 
+}; 
+
+struct ubus_client {
+	struct ubus_id id; 
+	struct list_head tx_queue; 
+	int fd; 
+
+	int recv_count; 
+	struct ubus_msg_header hdr; 
+	struct blob_buf data; 
+	//struct list_head rx_queue; 
 	
-	blob_attr_parse(msg, attrbuf, ubus_policy, UBUS_ATTR_MAX);
-	return attrbuf;
+}; 
+
+struct ubus_client *ubus_client_new(int fd){
+	struct ubus_client *self = calloc(1, sizeof(struct ubus_client)); 
+	INIT_LIST_HEAD(&self->tx_queue); 
+	self->fd = fd; 
+	self->recv_count = 0; 
+	blob_buf_init(&self->data, 0, 0); 
+	return self; 
 }
-*/
+
+struct ubus_request *ubus_request_new(uint32_t peer, uint16_t seq, struct blob_attr *msg){
+	struct ubus_request *self = calloc(1, sizeof(struct ubus_request)); 
+	blob_buf_init(&self->data, (char*)msg, blob_attr_pad_len(msg)); 
+	INIT_LIST_HEAD(&self->list); 
+	self->hdr.peer = peer; 
+	self->hdr.seq = seq; 
+	self->hdr.data_size = blob_attr_pad_len(msg); 
+	return self; 
+}
+
+void ubus_request_delete(struct ubus_request **self){
+	blob_buf_free(&(*self)->data); 
+	free(*self); 
+	*self = NULL; 
+}
+
+struct ubus_socket *ubus_socket_new(void){
+	struct ubus_socket *self = calloc(1, sizeof(struct ubus_socket)); 
+	ubus_socket_init(self); 
+	return self; 
+}
+
+void ubus_socket_delete(struct ubus_socket **self){
+	free(*self); 
+	*self = NULL; 
+}
+
+void ubus_socket_init(struct ubus_socket *self){
+	//INIT_LIST_HEAD(&self->clients); 
+	ubus_id_tree_init(&self->clients); 
+}
+
+static void _accept_connection(struct ubus_socket *self){
+	bool done = false; 
+
+	do {
+		int client = accept(self->listen_fd, NULL, 0);
+		if ( client < 0 ) {
+			switch (errno) {
+			case ECONNABORTED:
+			case EINTR:
+				done = true;
+			default:
+				return;  
+			}
+		}
+
+		// configure client into non blocking mode
+		fcntl(client, F_SETFL, fcntl(client, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
+
+		struct ubus_client *cl = ubus_client_new(client); 
+		ubus_id_alloc(&self->clients, &cl->id, 0); 
+		
+		if(self->on_client_connected){
+			self->on_client_connected(self, cl->id.id); 
+		}
+		
+		//printf("new client: %08x\n", cl->id.id); 
+	} while (!done);
+}
+
+
+int ubus_socket_listen(struct ubus_socket *self, const char *unix_socket){
+	unlink(unix_socket);
+	umask(0177);
+	self->listen_fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_NONBLOCK, unix_socket, NULL);
+	if (self->listen_fd < 0) {
+		perror("usock");
+		return -1; 
+	}
+	return 0; 
+}
+
+int ubus_socket_connect(struct ubus_socket *self, const char *path){
+	int fd = usock(USOCK_UNIX, path, NULL);
+	if (fd < 0)
+		return UBUS_STATUS_CONNECTION_FAILED;
+
+	fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
+
+	struct ubus_client *cl = ubus_client_new(fd); 
+	ubus_id_alloc(&self->clients, &cl->id, 0); 
+		
+	//printf("new outgoing connection: %08x\n", cl->id.id); 
+
+	return 0; 
+}
+
+void _ubus_client_recv(struct ubus_client *self, struct ubus_socket *socket){
+	// if we still have not received the header
+	if(self->recv_count < sizeof(struct ubus_msg_header)){
+		int rc = recv(self->fd, ((char*)&self->hdr) + self->recv_count, sizeof(struct ubus_msg_header) - self->recv_count, 0); 
+		if(rc > 0){
+			self->recv_count += rc; 
+		} 
+	}
+	// if we have just received the header then we allocate the body based on size in the header
+	if(self->recv_count == sizeof(struct ubus_msg_header)){
+		// TODO: validate header here!
+		//printf("got header! %d bytes, data of %d bytes header size should be %d\n", self->recv_count, self->hdr.data_size, (int)sizeof(struct ubus_msg_header)); 
+		blob_buf_resize(&self->data, self->hdr.data_size); 
+	}
+	// if we have received the header then we receive the body here
+	if(self->recv_count >= sizeof(struct ubus_msg_header)){
+		int rc = 0; 
+		int cursor = self->recv_count - sizeof(struct ubus_msg_header); 
+		while((rc = recv(self->fd, (char*)(blob_buf_head(&self->data)) + cursor, self->hdr.data_size - cursor, 0)) > 0){
+			self->recv_count += rc; 
+			cursor = self->recv_count - sizeof(struct ubus_msg_header);
+		}
+		// if we have received the full message then we call the message callback
+		if(self->recv_count == (sizeof(struct ubus_msg_header) + self->hdr.data_size)){
+			//printf("full message received %d bytes\n", self->hdr.data_size); 
+			if(socket->on_message){
+				socket->on_message(socket, self->id.id, self->hdr.type, self->hdr.seq, blob_buf_head(&self->data)); 
+			}
+			self->recv_count = 0; 
+		}
+	}
+}
+
+void _ubus_client_send(struct ubus_client *self){
+	if(list_empty(&self->tx_queue)){
+		return; 
+	}
+
+	struct ubus_request *req = list_first_entry(&self->tx_queue, struct ubus_request, list);
+	if(req->send_count < sizeof(struct ubus_msg_header)){
+		int sc = send(self->fd, ((char*)&req->hdr) + req->send_count, sizeof(struct ubus_msg_header) - req->send_count, 0); 
+		if(sc > 0){
+			req->send_count += sc; 
+		}
+	}
+	if(req->send_count >= sizeof(struct ubus_msg_header)){
+		int cursor = req->send_count - sizeof(struct ubus_msg_header); 
+		int sc; 
+		int buf_size = blob_attr_pad_len(blob_buf_head(&req->data)); 
+		while((sc = send(self->fd, blob_buf_head(&req->data) + cursor, buf_size - cursor, 0)) > 0){
+			req->send_count += sc; 
+			cursor = req->send_count - sizeof(struct ubus_msg_header);
+		}
+		if(req->send_count == (sizeof(struct ubus_msg_header) + buf_size)){
+			// full buffer was transmitted so we destroy the request
+			list_del_init(&req->list); 
+			//printf("removed completed request from queue! %d bytes\n", req->send_count); 
+			ubus_request_delete(&req); 
+		}
+	}
+}
+
+void ubus_socket_poll(struct ubus_socket *self, int timeout){
+	int count = avl_size(&self->clients) + 1; 
+	struct pollfd *pfd = alloca(sizeof(struct pollfd) * count); 
+	memset(pfd, 0, sizeof(struct pollfd) * count); 
+	struct ubus_client **clients = alloca(sizeof(void*)); 
+	pfd[0] = (struct pollfd){ .fd = self->listen_fd, .events = POLLIN | POLLERR }; 
+	clients[0] = 0; 
+
+	int c = 1; 
+	struct ubus_id *id;  
+	avl_for_each_element(&self->clients, id, avl){
+		struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
+		pfd[c] = (struct pollfd){ .fd = client->fd, .events = POLLIN | POLLERR };  
+		clients[c] = client;  
+		c++; 
+	}		
+	
+	// try to send more data
+	for(int c = 1; c < count; c++){
+		_ubus_client_send(clients[c]); 
+	}
+
+	int ret = 0; 
+	if((ret = poll(pfd, count, timeout)) > 0){
+		if(pfd[0].revents > 0){
+			_accept_connection(self);
+		}
+		for(int c = 1; c < count; c++){
+			if(pfd[c].revents > 0){
+				//printf("fd %d %d has data!\n", c, clients[c]->fd); 
+				// receive as much data as we can
+				_ubus_client_recv(clients[c], self); 
+			}
+		}
+	}
+}
+
+int ubus_socket_send(struct ubus_socket *self, uint32_t peer, int type, struct blob_attr *msg){
+	struct ubus_id *id;  
+	avl_for_each_element(&self->clients, id, avl){
+		struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
+		struct ubus_request *req = ubus_request_new(peer, type, msg);
+		list_add(&req->list, &client->tx_queue); 
+		//printf("added request to tx_queue!\n"); 
+	}		
+	return 0; 	
+}
+
+#if 0
 static void wait_data(int fd, bool write)
 {
 	struct pollfd pfd = { .fd = fd };
@@ -119,7 +344,7 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 	return -1;
 }
 
-int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
+int ubus_socket_send_raw(struct ubus_socket *self, uint32_t seq,
 			   void *msg, size_t size, int cmd, uint32_t peer, int fd)
 {
 	struct ubus_msghdr hdr;
@@ -134,21 +359,25 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	hdr.peer = peer;
 
 	if (!msg) {
-		blob_buf_reset(&ctx->buf);
-		msg = blob_buf_head(&ctx->buf);
+		blob_buf_reset(&self->buf);
+		msg = blob_buf_head(&self->buf);
 	}
 
 	iov[1].iov_base = (char *) msg;
 	iov[1].iov_len = size; ;
 
-	ret = writev_retry(ctx->sock.fd, iov, ARRAY_SIZE(iov), fd);
+	ret = writev_retry(self->sock.fd, iov, ARRAY_SIZE(iov), fd);
 	if (ret < 0)
-		ctx->sock.eof = true;
+		self->sock.eof = true;
 
 	if (fd >= 0)
 		close(fd);
 
 	return ret;
+}
+
+int ubus_socket_send(struct ubus_socket *self, uint32_t peer, int type, struct blob_attr *msg){
+	return ubus_socket_send_raw(self, 0, msg, blob_attr_pad_len(msg), type, peer, 0);  
 }
 
 static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd){
@@ -187,7 +416,7 @@ static int recv_retry(int fd, struct iovec *iov, bool wait, int *recv_fd){
 
 		if (bytes < 0) {
 			bytes = 0;
-			//if (ctx->cancelled)
+			//if (self->cancelled)
 			//	return 0;
 			if (errno == EINTR)
 				continue;
@@ -228,13 +457,13 @@ static bool ubus_validate_hdr(struct ubus_msghdr *hdr)
 	return true;
 }
 
-static bool alloc_msg_buf(struct ubus_context *ctx, int len)
+static bool alloc_msg_buf(struct ubus_socket *self, int len)
 {
 	void *ptr;
-	int buf_len = ctx->msgbuf_data_len;
+	int buf_len = self->msgbuf_data_len;
 	int rem;
 
-	if (!ctx->msgbuf.data)
+	if (!self->msgbuf.data)
 		buf_len = 0;
 
 	rem = (len % UBUS_MSG_CHUNK_SIZE);
@@ -242,23 +471,23 @@ static bool alloc_msg_buf(struct ubus_context *ctx, int len)
 		len += UBUS_MSG_CHUNK_SIZE - rem;
 
 	if (len < buf_len &&
-	    ++ctx->msgbuf_reduction_counter > UBUS_MSGBUF_REDUCTION_INTERVAL) {
-		ctx->msgbuf_reduction_counter = 0;
+	    ++self->msgbuf_reduction_counter > UBUS_MSGBUF_REDUCTION_INTERVAL) {
+		self->msgbuf_reduction_counter = 0;
 		buf_len = 0;
 	}
 
 	if (len <= buf_len)
 		return true;
 
-	ptr = realloc(ctx->msgbuf.data, len);
+	ptr = realloc(self->msgbuf.data, len);
 	if (!ptr)
 		return false;
 
-	ctx->msgbuf.data = ptr;
+	self->msgbuf.data = ptr;
 	return true;
 }
 
-static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
+static bool get_next_msg(struct ubus_socket *self, int *recv_fd)
 {
 	struct {
 		struct ubus_msghdr hdr;
@@ -269,10 +498,10 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	int r;
 
 	/* receive header + start attribute */
-	r = recv_retry(ctx->sock.fd, &iov, false, recv_fd);
+	r = recv_retry(self->sock.fd, &iov, false, recv_fd);
 	if (r <= 0) {
 		if (r < 0)
-			ctx->sock.eof = true;
+			self->sock.eof = true;
 
 		return false;
 	}
@@ -281,76 +510,62 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 		return false;
 
 	len = blob_attr_raw_len(&hdrbuf.data);
-	if (!alloc_msg_buf(ctx, len))
+	if (!alloc_msg_buf(self, len))
 		return false;
 
-	memcpy(&ctx->msgbuf.hdr, &hdrbuf.hdr, sizeof(hdrbuf.hdr));
-	memcpy(ctx->msgbuf.data, &hdrbuf.data, sizeof(hdrbuf.data));
+	memcpy(&self->msgbuf.hdr, &hdrbuf.hdr, sizeof(hdrbuf.hdr));
+	memcpy(self->msgbuf.data, &hdrbuf.data, sizeof(hdrbuf.data));
 
-	iov.iov_base = (char *)ctx->msgbuf.data + sizeof(hdrbuf.data);
-	iov.iov_len = blob_attr_len(ctx->msgbuf.data);
-	if (iov.iov_len > 0 && !recv_retry(ctx->sock.fd, &iov, true, NULL))
+	iov.iov_base = (char *)self->msgbuf.data + sizeof(hdrbuf.data);
+	iov.iov_len = blob_attr_len(self->msgbuf.data);
+	if (iov.iov_len > 0 && !recv_retry(self->sock.fd, &iov, true, NULL))
 		return false;
 
 	return true;
 }
-
-static void ubus_refresh_state(struct ubus_context *ctx){
+/*
+static void ubus_refresh_state(struct ubus_socket *self){
 	struct ubus_object *obj, *tmp;
 	struct ubus_object **objs;
 	int n, i = 0;
 
-	/* clear all type IDs, they need to be registered again */
-	//avl_for_each_element(&ctx->objects, obj, avl)
+	//avl_for_each_element(&self->objects, obj, avl)
 //		if (obj->type)
 //			obj->type->id = 0;
 
-	/* push out all objects again */
-	objs = alloca(ctx->objects.count * sizeof(*objs));
-	avl_remove_all_elements(&ctx->objects, obj, avl, tmp) {
+	objs = alloca(self->objects.count * sizeof(*objs));
+	avl_remove_all_elements(&self->objects, obj, avl, tmp) {
 		objs[i++] = obj;
 		obj->id = 0;
 	}
 
 	for (n = i, i = 0; i < n; i++)
-		ubus_add_object(ctx, objs[i]);
+		ubus_add_object(self, objs[i]);
+}
+static void _ubus_default_connection_lost(struct ubus_socket *self){
+	//if (self->sock.registered)
+	//		uloop_delete(&self->uloop);
 }
 
-static void _ubus_default_connection_lost(struct ubus_context *ctx){
-	//if (ctx->sock.registered)
-	//		uloop_delete(&ctx->uloop);
-}
-
+*/
 
 static void _ubus_process_pending_msg(struct uloop_timeout *timeout){
-	struct ubus_context *ctx = container_of(timeout, struct ubus_context, pending_timer);
-	struct ubus_pending_msg *pending;
+	//struct ubus_socket *self = container_of(timeout, struct ubus_socket, pending_timer);
+	//struct ubus_pending_msg *pending;
 
-	while (!ctx->stack_depth && !list_empty(&ctx->pending)) {
-		pending = list_first_entry(&ctx->pending, struct ubus_pending_msg, list);
+/*
+	while (!self->stack_depth && !list_empty(&self->pending)) {
+		pending = list_first_entry(&self->pending, struct ubus_pending_msg, list);
 		list_del(&pending->list);
-		ubus_process_msg(ctx, &pending->hdr, -1);
+		ubus_process_msg(self, &pending->hdr, -1);
 		free(pending);
 	}
+	*/
 }
 
-
-static void _ubus_handle_data(struct uloop_fd *u, unsigned int events){
-	struct ubus_context *ctx = container_of(u, struct ubus_context, sock);
-	int recv_fd = -1;
-
-	while (get_next_msg(ctx, &recv_fd)) {
-		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
-		//if (uloop_cancelled)
-		//	break;
-	}
-
-	if (u->eof)
-		ctx->connection_lost(ctx);
-}
 
 //struct blob_buf b __hidden = {};
-static int ubus_cmp_id(const void *k1, const void *k2, void *ptr){
+/*static int ubus_cmp_id(const void *k1, const void *k2, void *ptr){
 	const uint32_t *id1 = k1, *id2 = k2;
 
 	if (*id1 < *id2)
@@ -358,65 +573,33 @@ static int ubus_cmp_id(const void *k1, const void *k2, void *ptr){
 	else
 		return *id1 > *id2;
 }
+*/
 
-
-void  ubus_poll_data(struct ubus_context *ctx, int timeout){
-	struct pollfd pfd = {
-		.fd = ctx->sock.fd,
-		.events = POLLIN | POLLERR,
-	};
-
-	poll(&pfd, 1, timeout);
-	_ubus_handle_data(&ctx->sock, ULOOP_READ);
-}
-
-int ubus_connect(struct ubus_context *ctx, const char *path)
-{
-	ctx->sock.fd = -1;
-	ctx->sock.cb = _ubus_handle_data;
-	ctx->connection_lost = _ubus_default_connection_lost;
-	ctx->pending_timer.cb = _ubus_process_pending_msg;
-
-	ctx->msgbuf.data = calloc(UBUS_MSG_CHUNK_SIZE, sizeof(char));
-	if (!ctx->msgbuf.data)
-		return -1;
-	ctx->msgbuf_data_len = UBUS_MSG_CHUNK_SIZE;
-
-	INIT_LIST_HEAD(&ctx->requests);
-	INIT_LIST_HEAD(&ctx->pending);
-	avl_init(&ctx->objects, ubus_cmp_id, false, NULL);
-	if (ubus_reconnect(ctx, path)) {
-		free(ctx->msgbuf.data);
-		return -1;
-	}
-
-	return 0;
-}
-
-
-int ubus_reconnect(struct ubus_context *ctx, const char *path){
-	struct {
+int ubus_reconnect(struct ubus_socket *self, const char *path){
+	/*struct {
 		struct ubus_msghdr hdr;
 		struct blob_attr data;
 	} hdr;
-	struct blob_attr *buf;
+	*/
+	//struct blob_attr *buf;
 	int ret = UBUS_STATUS_UNKNOWN_ERROR;
-
+	
 	if (!path)
 		path = UBUS_UNIX_SOCKET;
 
-	if (ctx->sock.fd >= 0) {
-		if (ctx->sock.registered)
-			uloop_remove_fd(ctx->uloop, &ctx->sock);
+	if (self->sock.fd >= 0) {
+		//if (self->sock.registered)
+	//		uloop_remove_fd(self->uloop, &self->sock);
 
-		close(ctx->sock.fd);
+		close(self->sock.fd);
 	}
 
-	ctx->sock.fd = usock(USOCK_UNIX, path, NULL);
-	if (ctx->sock.fd < 0)
+	self->sock.fd = usock(USOCK_UNIX, path, NULL);
+	if (self->sock.fd < 0)
 		return UBUS_STATUS_CONNECTION_FAILED;
 
-	if (read(ctx->sock.fd, &hdr, sizeof(hdr)) != sizeof(hdr))
+/*
+	if (read(self->sock.fd, &hdr, sizeof(hdr)) != sizeof(hdr))
 		goto out_close;
 
 	if (!ubus_validate_hdr(&hdr.hdr))
@@ -430,60 +613,84 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path){
 		goto out_close;
 
 	memcpy(buf, &hdr.data, sizeof(hdr.data));
-	if (read(ctx->sock.fd, blob_attr_data(buf), blob_attr_len(buf)) != blob_attr_len(buf))
+	if (read(self->sock.fd, blob_attr_data(buf), blob_attr_len(buf)) != blob_attr_len(buf))
 		goto out_free;
 
-	ctx->local_id = hdr.hdr.peer;
-	if (!ctx->local_id)
+	self->local_id = hdr.hdr.peer;
+	if (!self->local_id)
 		goto out_free;
-
+*/
 	ret = UBUS_STATUS_OK;
-	fcntl(ctx->sock.fd, F_SETFL, fcntl(ctx->sock.fd, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
+	fcntl(self->sock.fd, F_SETFL, fcntl(self->sock.fd, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
 
-	ubus_refresh_state(ctx);
+//	ubus_refresh_state(self);
 
-out_free:
-	free(buf);
-out_close:
-	if (ret)
-		close(ctx->sock.fd);
+//out_free:
+//	free(buf);
+//out_close:
+//	if (ret)
+//		close(self->sock.fd);
 
 	return ret;
 }
 
+int ubus_socket_connect(struct ubus_socket *self, const char *path){
+	
+/*
+	self->sock.fd = -1;
+	self->sock.cb = _ubus_handle_data;
+	//self->connection_lost = _ubus_default_connection_lost;
+	self->pending_timer.cb = _ubus_process_pending_msg;
+
+	self->msgbuf.data = calloc(UBUS_MSG_CHUNK_SIZE, sizeof(char));
+	if (!self->msgbuf.data)
+		return -1;
+	self->msgbuf_data_len = UBUS_MSG_CHUNK_SIZE;
+
+	INIT_LIST_HEAD(&self->requests);
+	INIT_LIST_HEAD(&self->pending);
+	//avl_init(&self->objects, ubus_cmp_id, false, NULL);
+	if (ubus_reconnect(self, path)) {
+		free(self->msgbuf.data);
+		return -1;
+	}
+*/
+	return 0;
+}
+/*
 static void ubus_auto_reconnect_cb(struct uloop_timeout *timeout)
 {
 	//struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
 
 	fprintf(stderr, "%s: fix autoreconnect!\n", __FUNCTION__); 
 
-	//if (!ubus_reconnect(&conn->ctx, conn->path))
-	//	ubus_add_uloop(&conn->ctx);
+	//if (!ubus_reconnect(&conn->self, conn->path))
+	//	ubus_add_uloop(&conn->self);
 	//else
 	//	uloop_timeout_set(self->uloop, timeout, 1000);
 }
-
-static void ubus_auto_disconnect_cb(struct ubus_context *ctx)
+*/
+/*
+static void ubus_auto_disconnect_cb(struct ubus_socket *self)
 {
-	struct ubus_auto_conn *conn = container_of(ctx, struct ubus_auto_conn, ctx);
+	struct ubus_auto_conn *conn = container_of(self, struct ubus_auto_conn, self);
 
 	conn->timer.cb = ubus_auto_reconnect_cb;
 	uloop_timeout_set(&conn->timer, 1000);
 }
-
 static void ubus_auto_connect_cb(struct uloop_timeout *timeout)
 {
 	struct ubus_auto_conn *conn = container_of(timeout, struct ubus_auto_conn, timer);
 
-	if (ubus_connect(&conn->ctx, conn->path)) {
+	if (ubus_connect(&conn->self, conn->path)) {
 		uloop_timeout_set(timeout, 1000);
 		fprintf(stderr, "failed to connect to ubus\n");
 		return;
 	}
-	conn->ctx.connection_lost = ubus_auto_disconnect_cb;
+	conn->self.connection_lost = ubus_auto_disconnect_cb;
 	if (conn->cb)
-		conn->cb(&conn->ctx);
-	//ubus_add_uloop(&conn->ctx);
+		conn->cb(&conn->self);
+	//ubus_add_uloop(&conn->self);
 }
 
 void ubus_auto_connect(struct ubus_auto_conn *conn)
@@ -491,4 +698,5 @@ void ubus_auto_connect(struct ubus_auto_conn *conn)
 	conn->timer.cb = ubus_auto_connect_cb;
 	ubus_auto_connect_cb(&conn->timer);
 }
-
+*/
+#endif

@@ -32,58 +32,30 @@ struct ubus_msghdr {
 } __packetdata;
 
 enum ubus_msg_type {
-	/* initial server message */
+	// initial server message
 	UBUS_MSG_HELLO,
 
-	/* generic command response */
-	UBUS_MSG_STATUS,
+	// method call
+	UBUS_MSG_METHOD_CALL, 
 
-	/* data message response */
-	UBUS_MSG_DATA,
+	// method success return 
+	UBUS_MSG_METHOD_RETURN, 
 
-	/* ping request */
-	UBUS_MSG_PING,
+	// request failure 
+	UBUS_MSG_ERROR, 
 
-	/* look up one or more objects */
-	UBUS_MSG_LOOKUP,
+	// asynchronous signal message
+	UBUS_MSG_SIGNAL,
 
-	/* invoke a method on a single object */
-	UBUS_MSG_INVOKE,
-
-	UBUS_MSG_ADD_OBJECT,
-	UBUS_MSG_REMOVE_OBJECT,
-
-	/*
-	 * subscribe/unsubscribe to object notifications
-	 * The unsubscribe message is sent from ubusd when
-	 * the object disappears
-	 */
-	UBUS_MSG_SUBSCRIBE,
-	UBUS_MSG_UNSUBSCRIBE,
-
-	/*
-	 * send a notification to all subscribers of an object.
-	 * when sent from the server, it indicates a subscription
-	 * status change
-	 */
-	UBUS_MSG_NOTIFY,
-
-	/* must be last */
-	__UBUS_MSG_LAST,
-};
+	__UBUS_MSG_LAST
+}; 
 
 static __attribute__((unused)) const char *ubus_message_types[] = {
 	"UBUS_MSG_HELLO",
-	"UBUS_MSG_STATUS",
-	"UBUS_MSG_DATA",
-	"UBUS_MSG_PING",
-	"UBUS_MSG_LOOKUP",
-	"UBUS_MSG_INVOKE",
-	"UBUS_MSG_ADD_OBJECT",
-	"UBUS_MSG_REMOVE_OBJECT",
-	"UBUS_MSG_SUBSCRIBE",
-	"UBUS_MSG_UNSUBSCRIBE",
-	"UBUS_MSG_NOTIFY"
+	"UBUS_MSG_METHOD_CALL", 
+	"UBUS_MSG_METHOD_RETURN",
+	"UBUS_MSG_ERROR", 
+	"UBUS_MSG_SIGNAL"
 }; 
 
 enum ubus_msg_attr {
@@ -131,5 +103,7 @@ struct ubus_msghdr_buf {
 };
 
 void ubus_message_parse(int type, struct blob_attr *msg, struct blob_attr **attrbuf); 
+
+#define UBUS_MAX_MSGLEN 10240000
 
 #endif

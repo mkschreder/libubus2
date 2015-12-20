@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2014 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2011 Felix Fietkau <nbd@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License version 2.1
@@ -10,19 +10,19 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#pragma once
 
-#include <unistd.h>
-#include "libubus2.h"
+#include <libutype/avl.h>
+#include <stdint.h>
 
-/*
-struct ubus_request *ubus_request_new(void){
-	struct ubus_request *req = calloc(1, sizeof(struct ubus_request)); 
-	return req; 
-}
+struct ubus_id {
+	struct avl_node avl;
+	uint32_t id;
+};
 
-void ubus_request_delete(struct ubus_request **self){
-	free(*self); 
-	*self = 0; 
-}
-*/
+void ubus_id_tree_init(struct avl_tree *tree);
+bool ubus_id_alloc(struct avl_tree *tree, struct ubus_id *id, uint32_t val);
+
+void ubus_id_free(struct avl_tree *tree, struct ubus_id *id); 
+struct ubus_id *ubusd_id_find(struct avl_tree *tree, uint32_t id); 
 
