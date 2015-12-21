@@ -41,7 +41,7 @@ struct ubus_msg_header {
 	uint16_t seq;		// request sequence that is set by sender 
 	uint32_t peer;		// destination peer  
 	uint32_t data_size;	// length of the data that follows 
-} __attribute__((packed)); 
+} __attribute__((packed)) __attribute__((__aligned__(4))); 
 
 struct ubus_frame {
 	struct list_head list; 

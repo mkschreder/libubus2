@@ -19,7 +19,7 @@
 
 #include <string.h>
 
-struct ubus_method* ubus_method_new(const char *name, ubus_request_handler_t cb){
+struct ubus_method* ubus_method_new(const char *name, ubus_method_handler_t cb){
 	struct ubus_method *self = calloc(1, sizeof(struct ubus_method)); 
 	ubus_method_init(self, name, cb); 
 	return self; 
@@ -30,7 +30,7 @@ void ubus_method_delete(struct ubus_method **self){
 	*self = NULL; 
 }
 
-void ubus_method_init(struct ubus_method *self, const char *name, ubus_request_handler_t cb){
+void ubus_method_init(struct ubus_method *self, const char *name, ubus_method_handler_t cb){
 	if(name) self->name = strdup(name); 
 	else self->name = 0; 
 	self->handler = cb; 

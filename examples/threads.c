@@ -3,9 +3,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
-static int test_method(struct ubus_context *ctx, struct ubus_object *obj,
-		  struct ubus_request *req, const char *method,
-		  struct blob_attr *msg)
+static int test_method(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj,
+		  struct ubus_request *req)
 {
 	void *t;
 	

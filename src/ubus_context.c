@@ -45,9 +45,8 @@ struct ubus_object *_find_object(struct ubus_context *self, const char *path){
 	return container_of(avl, struct ubus_object, avl); 
 }
 
-static __attribute__((unused)) int _on_rpc_call(struct ubus_context *ctx, struct ubus_object *obj,
-		  struct ubus_request *req, const char *method,
-		  struct blob_attr *msg){
+static __attribute__((unused)) int _on_rpc_call(struct ubus_method *self, struct ubus_context *ctx, 
+	struct ubus_object *obj, struct ubus_request *req){
 	printf("on_rpc_call!\n"); 
 	return 0; 
 }
@@ -78,13 +77,23 @@ void _on_msg_signal(struct ubus_context *self, struct ubus_peer *peer, uint16_t 
 	} else if(strcmp(signal_name, "ubus.peer.well_known_name") == 0){
 		attr = blob_attr_next_child(msg, attr); 
 		avl_delete(&self->peers_by_name, &peer->avl_name); 
-		printf("setting name of %s to %s\n",(char*)peer->avl_name.key, blob_attr_get_string(attr)); 
+		//printf("setting name of %s to %s\n",(char*)peer->avl_name.key, blob_attr_get_string(attr)); 
 		ubus_peer_set_name(peer, blob_attr_get_string(attr)); 
 		if(0 != avl_insert(&self->peers_by_name, &peer->avl_name)){
 			// TODO: handle duplicates
 		}
 		// TODO: handle errors and make sure peers are authenticated
 	}
+}
+
+static void _on_resolve_method_call(struct ubus_request *req, struct blob_attr *msg){
+	struct ubus_context *self = (struct ubus_context*)ubus_request_get_userdata(req); 
+	struct ubus_peer *peer = _find_peer_by_name(self, req->client); 
+
+	if(!peer) return; 
+	
+	// send reply with the same serial as the original request
+	ubus_socket_send(&self->socket, peer->id, UBUS_MSG_METHOD_RETURN, req->seq, msg);  
 }
 
 static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint16_t serial, struct blob_attr *msg){
@@ -103,13 +112,35 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 	
 	struct ubus_method *m = ubus_object_find_method(obj, method); 
 	if(!m) return; 
-	
-	//struct ubus_request *req = ubus_request_new(peer->name, path, method, msg); 
 
-	//ubus_method_invoke(m, self, req); 
-
-	//ubus_method_invoke(m, msg); 
 	printf("found object %s %s\n", path, method); 
+	
+	// now we have to create a new request object which we bind to reply functions
+	// so that when the application code calls ubus_request_resolve() we can 
+	// send back the result over the network to the other peer
+
+	struct ubus_request *req = ubus_request_new(peer->name, path, method, msg); 
+	req->seq = serial; 
+	ubus_request_set_userdata(req, self); 
+	ubus_request_on_resolve(req, &_on_resolve_method_call); 
+
+	// add the request to the list of pending requests 
+	list_add(&req->list, &self->pending_incoming); 
+
+	ubus_method_invoke(m, self, obj, req); 
+}
+
+static void _on_msg_return(struct ubus_context *self, struct ubus_peer *peer, uint16_t serial, struct blob_attr *msg){
+	// find the pending outgoing request that has the same serial 
+	struct ubus_request *req, *tmp, *found = NULL; 
+	list_for_each_entry_safe(req, tmp, &self->pending, list){
+		if(req->seq == serial){
+			found = req; 
+			break; 
+		}
+	}
+	if(!found) return; 
+	ubus_request_resolve(req, msg); 
 }
 
 static void _on_message_received(struct ubus_socket *socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_attr *msg){
@@ -126,6 +157,7 @@ static void _on_message_received(struct ubus_socket *socket, uint32_t peer, uint
 			break; 
 		}
 		case UBUS_MSG_METHOD_RETURN: {
+			_on_msg_return(self, p, serial, msg); 
 			break; 
 		}
 		case UBUS_MSG_SIGNAL: {
@@ -154,6 +186,7 @@ void _on_client_connected(struct ubus_socket *socket, uint32_t peer_id){
 void ubus_context_init(struct ubus_context *self, const char *name){
 	INIT_LIST_HEAD(&self->requests); 
 	INIT_LIST_HEAD(&self->pending); 
+	INIT_LIST_HEAD(&self->pending_incoming); 
 	avl_init(&self->peers_by_name, avl_intcmp, false, NULL); 
 	avl_init(&self->peers_by_id, avl_intcmp, false, NULL); 
 	avl_init(&self->objects, avl_strcmp, false, NULL); 
@@ -163,6 +196,7 @@ void ubus_context_init(struct ubus_context *self, const char *name){
 	ubus_socket_on_client_connected(&self->socket, &_on_client_connected); 
 	blob_buf_init(&self->buf, 0, 0); 
 	self->name = strdup(name);
+	self->request_seq = 1; 
 }
 
 void ubus_context_destroy(struct ubus_context *self){
@@ -194,6 +228,8 @@ int ubus_listen(struct ubus_context *self, const char *path){
 
 int ubus_send_request(struct ubus_context *self, struct ubus_request **_req){
 	struct ubus_request *req = *_req; 
+	req->seq = self->request_seq++; 
+	printf("sending request %08x\n", req->seq); 
 	list_add(&req->list, &self->requests); 
 	return 0; 
 }
@@ -221,6 +257,14 @@ int ubus_handle_events(struct ubus_context *self){
 	// try to send out pending requests
 	struct ubus_request *req; 
 	struct ubus_request *tmp; 
+	list_for_each_entry_safe(req, tmp, &self->pending_incoming, list){
+		if(req->failed || req->resolved){
+			printf("deleting completed request\n");
+			list_del_init(&req->list); 
+			ubus_request_delete(&req); 
+		}
+	}
+
 	list_for_each_entry_safe(req, tmp, &self->requests, list){
 		// check if the request has timed out
 		// TODO
@@ -237,7 +281,7 @@ int ubus_handle_events(struct ubus_context *self){
 		blob_buf_put_string(&self->buf, req->object); 
 		blob_buf_put_string(&self->buf, req->method); 
 		blob_buf_put_attr(&self->buf, blob_buf_head(&req->buf)); 
-		ubus_socket_send(&self->socket, peer->id, UBUS_MSG_METHOD_CALL, self->request_seq++, blob_buf_head(&self->buf)); 
+		ubus_socket_send(&self->socket, peer->id, UBUS_MSG_METHOD_CALL, req->seq, blob_buf_head(&self->buf)); 
 
 		// move the request to pending queue
 		list_del_init(&req->list); 

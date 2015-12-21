@@ -59,9 +59,6 @@ bool ubus_id_alloc(struct avl_tree *tree, struct ubus_id *id, uint32_t val){
 	do {
 		if (read(random_fd, &id->id, sizeof(id->id)) != sizeof(id->id))
 			return false;
-
-		if (id->id < UBUS_SYSTEM_OBJECT_MAX)
-			continue;
 	} while (avl_insert(tree, &id->avl) != 0);
 
 	return true;

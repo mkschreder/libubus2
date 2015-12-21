@@ -26,13 +26,36 @@ struct ubus_request {
 	char *object; 
 	char *method; 
 	struct blob_buf buf; 
+	uint16_t seq; 
+	bool resolved; 
+	bool failed; 
 
 	ubus_request_resolve_cb_t on_resolve; 
 	ubus_request_fail_cb_t on_fail; 
+
+	void *user_data; 
 }; 
 
 struct ubus_request *ubus_request_new(const char *client, const char *object, const char *method, struct blob_attr *msg); 
 void ubus_request_delete(struct ubus_request **self); 
+
+static inline void ubus_request_set_userdata(struct ubus_request *self, void *ptr){
+	self->user_data = ptr; 
+}
+
+static inline void* ubus_request_get_userdata(struct ubus_request *self) {
+	return self->user_data; 
+}
+
+static inline void ubus_request_resolve(struct ubus_request *self, struct blob_attr *msg){
+	if(self->on_resolve) self->on_resolve(self, msg); 
+	self->resolved = true; 
+}
+
+static inline void ubus_request_reject(struct ubus_request *self, int code, struct blob_attr *msg){
+	if(self->on_fail) self->on_fail(self, code, msg); 
+	self->failed = true; 
+}
 
 static inline void ubus_request_on_resolve(struct ubus_request *self, ubus_request_resolve_cb_t cb){
 	self->on_resolve = cb; 

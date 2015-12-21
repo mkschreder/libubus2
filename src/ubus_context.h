@@ -25,7 +25,6 @@
 #include "ubus_object.h"
 #include "ubus_socket.h"
 #include "ubus_context.h"
-#include "ubus_subscriber.h"
 
 #define UBUS_DEFAULT_SOCKET "/var/run/ubus.sock"
 
@@ -35,6 +34,7 @@ struct ubus_context {
 	struct avl_tree objects; 
 	struct list_head requests;
 	struct list_head pending; 
+	struct list_head pending_incoming; 
 	struct ubus_socket socket; 
 
 	uint16_t request_seq;

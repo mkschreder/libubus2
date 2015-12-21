@@ -21,15 +21,19 @@
 #define UBUS_METHOD_PARAM_OUT 2
 
 struct blob_attr; 
-
+/*
 typedef int (*ubus_request_handler_t)(struct ubus_context *ctx, struct ubus_object *obj,
 			      struct ubus_request *req,
 			      const char *method, struct blob_attr *msg);
-
+*/
+typedef int (*ubus_method_handler_t)(struct ubus_method *self, 
+	struct ubus_context *ctx, 
+	struct ubus_object *obj, 
+	struct ubus_request *req);
 
 struct ubus_method {
 	char *name;
-	ubus_request_handler_t handler;
+	ubus_method_handler_t handler;
 	struct blob_buf signature; 
 	
 	// list head for the list of methods (TODO: maybe use avl for this?) 
@@ -40,7 +44,7 @@ struct ubus_method {
 	int n_policy;
 };
 
-struct ubus_method *ubus_method_new(const char *name, ubus_request_handler_t cb);  
+struct ubus_method *ubus_method_new(const char *name, ubus_method_handler_t cb);  
 void ubus_method_delete(struct ubus_method **self); 
 
 //! Add a parameter to list of parameters for the method. 
@@ -48,5 +52,10 @@ void ubus_method_add_param(struct ubus_method *self, const char *name, const cha
 //! Add a return value to list of return values
 void ubus_method_add_return(struct ubus_method *self, const char *name, const char *signature); 
 
-void ubus_method_init(struct ubus_method *self, const char *name, ubus_request_handler_t cb); 
+void ubus_method_init(struct ubus_method *self, const char *name, ubus_method_handler_t cb); 
 void ubus_method_destroy(struct ubus_method *self); 
+
+static inline int ubus_method_invoke(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req){
+	if(self->handler) return self->handler(self, ctx, obj, req); 
+	return 0; 
+}

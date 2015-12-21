@@ -4,10 +4,11 @@
 
 #include <libubus2.h>
 
-static __attribute__((unused)) int test_method(struct ubus_context *ctx, struct ubus_object *obj,
-		  struct ubus_request *req, const char *method,
-		  struct blob_attr *msg){
+static __attribute__((unused)) int test_method(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj,
+		  struct ubus_request *req){
 	void *t;
+
+	printf("test_method!\n"); 
 
 	struct blob_buf bb; 
 	blob_buf_init(&bb, 0, 0);
@@ -22,6 +23,7 @@ static __attribute__((unused)) int test_method(struct ubus_context *ctx, struct 
 	blob_buf_put_u32(&bb, 11);
 	blob_buf_close_table(&bb, t);
 
+	ubus_request_resolve(req, blob_buf_head(&bb)); 
 	//ubus_send_reply(ctx, req, blob_buf_head(&bb));
 	blob_buf_free(&bb); 
 	return 0;
