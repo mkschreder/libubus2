@@ -35,11 +35,6 @@ struct ubus_event_handler;
 struct ubus_subscriber;
 struct ubus_notify_request;
 
-static inline void ubus_add_uloop(struct ubus_context *ctx)
-{
-	//uloop_add_fd(ctx->uloop, &ctx->sock, ULOOP_BLOCKING | ULOOP_READ);
-}
-
 #define UBUS_OBJECT_TYPE(_name, _methods)		\
 	{						\
 		.name = _name,				\

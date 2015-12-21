@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 static int test_method(struct ubus_context *ctx, struct ubus_object *obj,
-		  struct ubus_request_data *req, const char *method,
+		  struct ubus_request *req, const char *method,
 		  struct blob_attr *msg)
 {
 	void *t;
@@ -19,12 +19,12 @@ static int test_method(struct ubus_context *ctx, struct ubus_object *obj,
 	blob_buf_put_u32(&bb, 11);
 	blob_buf_close_table(&bb, t);
 
-	ubus_send_reply(ctx, req, blob_buf_head(&bb));
+	//ubus_send_reply(ctx, req, blob_buf_head(&bb));
 	return 0;
 }
 
 void* client_thread(void *args){
-	struct ubus_context *ctx = ubus_new(); 
+	struct ubus_context *ctx = ubus_new("client"); 
 		
 	if(ubus_connect(ctx, "test.sock") < 0){
 		printf("Error connecting to ubus socket!\n"); 
@@ -43,7 +43,7 @@ void* client_thread(void *args){
 	ubus_dir_publish_object(ctx, &obj); 
 
 	while(true){
-		ubus_handle_event(ctx); 
+		ubus_handle_events(ctx); 
 	}
 
 	ubus_delete(&ctx); 

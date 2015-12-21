@@ -56,7 +56,7 @@ int ubus_dir_publish_object(struct ubus_context *ctx, struct ubus_object **objpt
 */
 	return 0;
 }
-
+/*
 static void _ubus_remove_object_cb(struct ubus_request *req, int type, struct blob_attr *msg){
 	struct ubus_object *obj = req->priv;
 
@@ -70,15 +70,15 @@ static void _ubus_remove_object_cb(struct ubus_request *req, int type, struct bl
 
 	avl_delete(&req->ctx->objects, &obj->avl);
 }
-
+*/
 int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
 {
 
 	blob_buf_reset(&ctx->buf);
 	blob_buf_put_i32(&ctx->buf, obj->id);
 	
-	if(ubus_invoke(ctx, 0, "ubus.directory.publish", blob_buf_head(&ctx->buf), _ubus_remove_object_cb, NULL, 5000) < 0)
-		return UBUS_STATUS_INVALID_ARGUMENT; 
+	//if(ubus_invoke(ctx, 0, "ubus.directory.publish", blob_buf_head(&ctx->buf), _ubus_remove_object_cb, NULL, 5000) < 0)
+//		return UBUS_STATUS_INVALID_ARGUMENT; 
 /*
 	if (ubus_start_request(ctx, &req, blob_buf_head(&ctx->buf), blob_buf_size(&ctx->buf), UBUS_MSG_, 0) < 0)
 		return UBUS_STATUS_INVALID_ARGUMENT;

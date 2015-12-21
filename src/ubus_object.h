@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <inttypes.h>
 #include <libutype/avl.h>
 
+struct blob_buf; 
 struct ubus_context; 
 struct ubus_method; 
 
@@ -38,15 +40,16 @@ struct ubus_object {
 
 	void *priv; // private data to attach to owner of the object 
 };
-
+/*
 struct ubus_object_data {
+	struct avl_node avl; 
 	uint32_t id;
 	uint32_t type_id;
 	uint32_t client_id; 
 	const char *path;
 	struct blob_attr *signature;
 };
-
+*/
 struct ubus_object *ubus_object_new(const char *name); 
 void ubus_object_delete(struct ubus_object **obj); 
 
@@ -54,10 +57,10 @@ void ubus_object_init(struct ubus_object *obj, const char *name);
 void ubus_object_destroy(struct ubus_object *obj);
 
 void ubus_object_add_method(struct ubus_object *obj, struct ubus_method **method); 
+struct ubus_method *ubus_object_find_method(struct ubus_object *obj, const char *name); 
 void ubus_object_publish_method(struct ubus_object *obj, struct ubus_method **method); 
 
-typedef void (*ubus_lookup_handler_t)(struct ubus_context *ctx,
-				      struct ubus_object_data *obj,
-				      void *priv);
+void ubus_object_serialize(struct ubus_object *obj, struct blob_buf *buf); 
+
 
 

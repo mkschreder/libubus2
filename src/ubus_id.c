@@ -23,7 +23,7 @@
 
 static int random_fd = -1;
 
-static int ubusd_cmp_id(const void *k1, const void *k2, void *ptr){
+static int ubus_cmp_id(const void *k1, const void *k2, void *ptr){
 	const uint32_t *id1 = k1, *id2 = k2;
 
 	if (*id1 < *id2)
@@ -32,7 +32,7 @@ static int ubusd_cmp_id(const void *k1, const void *k2, void *ptr){
 		return *id1 > *id2;
 }
 
-void ubusd_init_string_tree(struct avl_tree *tree, bool dup)
+void ubus_id_string_tree_init(struct avl_tree *tree, bool dup)
 {
 	avl_init(tree, avl_strcmp, dup, NULL);
 }
@@ -46,7 +46,7 @@ void ubus_id_tree_init(struct avl_tree *tree){
 		}
 	}
 
-	avl_init(tree, ubusd_cmp_id, false, NULL);
+	avl_init(tree, ubus_cmp_id, false, NULL);
 }
 
 bool ubus_id_alloc(struct avl_tree *tree, struct ubus_id *id, uint32_t val){

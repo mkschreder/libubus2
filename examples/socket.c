@@ -1,3 +1,16 @@
+/*
+ * Copyright (C) 2015 Martin Schröder <mkschreder.uk@gmail.com>
+ * 
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License version 2.1
+ * as published by the Free Software Foundation
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
 #include <libubus2/libubus2.h>
 
 void on_message1(struct ubus_socket *self, uint32_t peer, uint8_t type, uint32_t serial, struct blob_attr *msg){
@@ -41,7 +54,7 @@ int main(int argc, char **argv){
 	blob_buf_init(&buf, 0, 0); 
 	blob_buf_put_i32(&buf, 123); 
 
-	ubus_socket_send(client2, 0, 0, blob_buf_head(&buf)); 
+	ubus_socket_send(client2, UBUS_PEER_BROADCAST, 0, 0, blob_buf_head(&buf)); 
 
 	while(true){
 		//ubus_socket_send(client2, 0, 0, blob_buf_head(&buf)); 

@@ -14,13 +14,16 @@
 
 #pragma once 
 
+#include "ubus_object.h"
 #include "ubus_request.h"
 
 #define UBUS_METHOD_PARAM_IN 1
 #define UBUS_METHOD_PARAM_OUT 2
 
+struct blob_attr; 
+
 typedef int (*ubus_request_handler_t)(struct ubus_context *ctx, struct ubus_object *obj,
-			      struct ubus_request_data *req,
+			      struct ubus_request *req,
 			      const char *method, struct blob_attr *msg);
 
 

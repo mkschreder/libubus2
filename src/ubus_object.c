@@ -30,6 +30,7 @@ void ubus_object_delete(struct ubus_object **self){
 void ubus_object_init(struct ubus_object *self, const char *name){
 	memset(self, 0, sizeof(*self)); 
 	self->name = strdup(name); 
+	self->avl.key = self->name; 
 	INIT_LIST_HEAD(&self->methods); 
 }
 
@@ -40,5 +41,24 @@ void ubus_object_destroy(struct ubus_object *self){
 void ubus_object_add_method(struct ubus_object *self, struct ubus_method **method){
 	list_add(&(*method)->list, &self->methods); 	
 	*method = NULL; 
+}
+
+struct ubus_method *ubus_object_find_method(struct ubus_object *self, const char *name){
+	struct ubus_method *m; 
+	list_for_each_entry(m, &self->methods, list){
+		if(strcmp(m->name, name) == 0) return m; 
+	}
+	return NULL; 
+}
+
+void ubus_object_serialize(struct ubus_object *self, struct blob_buf *buf){
+	struct list_head *pos = NULL; 
+	blob_offset_t ofs = blob_buf_open_array(buf); 
+	list_for_each(pos, &self->methods){
+		struct ubus_method *m = container_of(pos, struct ubus_method, list); 
+		blob_buf_put_string(buf, m->name); 
+		blob_buf_put_attr(buf, blob_buf_head(&m->signature)); 	
+	}
+	blob_buf_close_array(buf, ofs); 
 }
 
