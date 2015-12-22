@@ -39,7 +39,6 @@ struct ubus_msg_header {
 	uint8_t hdr_size; 	// works as a magic. Must always be sizeof(struct ubus_msg_header)
 	uint8_t type;  		// type of request 
 	uint16_t seq;		// request sequence that is set by sender 
-	uint32_t peer;		// destination peer  
 	uint32_t data_size;	// length of the data that follows 
 } __attribute__((packed)) __attribute__((__aligned__(4))); 
 
@@ -59,7 +58,7 @@ struct ubus_client {
 	int recv_count; 
 	struct ubus_msg_header hdr; 
 	struct blob_buf data; 
-	//struct list_head rx_queue; 
+	//struct list_head rx_queue;
 }; 
 
 struct ubus_client *ubus_client_new(int fd){
@@ -71,11 +70,10 @@ struct ubus_client *ubus_client_new(int fd){
 	return self; 
 }
 
-struct ubus_frame *ubus_frame_new(uint32_t peer, int type, uint16_t seq, struct blob_attr *msg){
+struct ubus_frame *ubus_frame_new(int type, uint16_t seq, struct blob_attr *msg){
 	struct ubus_frame *self = calloc(1, sizeof(struct ubus_frame)); 
 	blob_buf_init(&self->data, (char*)msg, blob_attr_pad_len(msg)); 
 	INIT_LIST_HEAD(&self->list); 
-	self->hdr.peer = peer; 
 	self->hdr.type = type;  
 	self->hdr.seq = seq; 
 	self->hdr.data_size = blob_attr_pad_len(msg); 
@@ -133,15 +131,36 @@ static void _accept_connection(struct ubus_socket *self){
 			self->on_client_connected(self, cl->id.id); 
 		}
 		
-		//printf("new client: %08x\n", cl->id.id); 
+		printf("new client: %08x\n", cl->id.id); 
 	} while (!done);
 }
 
+static void _split_address_port(char *address, int addrlen, char **port){
+	for(int c = 0; c < addrlen; c++){
+		if(address[c] == ':' && c != (addrlen - 1)) {
+			address[c] = 0; 
+			*port = address + c + 1; 
+			break; 
+		}
+	}
+}
 
-int ubus_socket_listen(struct ubus_socket *self, const char *unix_socket){
-	unlink(unix_socket);
-	umask(0177);
-	self->listen_fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_NONBLOCK, unix_socket, NULL);
+int ubus_socket_listen(struct ubus_socket *self, const char *_address){
+	assert(_address);
+	int addrlen = strlen(_address); 
+	char *address = alloca(addrlen); 
+	strcpy(address, _address); 
+	char *port = NULL; 
+	int flags =  USOCK_SERVER | USOCK_NONBLOCK; 
+	if(address[0] == '/' || address[0] == '.'){
+		umask(0177);
+		unlink(address);
+		flags |= USOCK_UNIX; 
+	} else {
+		_split_address_port(address, addrlen, &port); 
+	}
+	printf("trying to listen on %s %s\n", address, port); 
+	self->listen_fd = usock(flags, address, port);
 	if (self->listen_fd < 0) {
 		perror("usock");
 		return -1; 
@@ -149,8 +168,15 @@ int ubus_socket_listen(struct ubus_socket *self, const char *unix_socket){
 	return 0; 
 }
 
-int ubus_socket_connect(struct ubus_socket *self, const char *path){
-	int fd = usock(USOCK_UNIX, path, NULL);
+int ubus_socket_connect(struct ubus_socket *self, const char *_address){
+	int flags = 0; 
+	int addrlen = strlen(_address); 
+	char *address = alloca(addrlen); 
+	strcpy(address, _address); 
+	char *port = NULL; 
+	if(address[0] == '/' || address[0] == '.') flags |= USOCK_UNIX; 
+	else _split_address_port(address, addrlen, &port); 
+	int fd = usock(flags, address, port);
 	if (fd < 0)
 		return -UBUS_STATUS_CONNECTION_FAILED;
 
@@ -193,7 +219,7 @@ void _ubus_client_recv(struct ubus_client *self, struct ubus_socket *socket){
 		if(self->recv_count == (sizeof(struct ubus_msg_header) + self->hdr.data_size)){
 			//printf("full message received %d bytes\n", self->hdr.data_size); 
 			if(socket->on_message){
-				socket->on_message(socket, self->hdr.peer, self->id.id, self->hdr.type, self->hdr.seq, blob_buf_head(&self->data)); 
+				socket->on_message(socket, self->id.id, self->hdr.type, self->hdr.seq, blob_buf_head(&self->data)); 
 			}
 			self->recv_count = 0; 
 		}
@@ -266,12 +292,12 @@ void ubus_socket_poll(struct ubus_socket *self, int timeout){
 	}
 }
 
-int ubus_socket_send(struct ubus_socket *self, int32_t peer, uint32_t target, int type, uint16_t serial, struct blob_attr *msg){
+int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t serial, struct blob_attr *msg){
 	struct ubus_id *id;  
 	if(peer == UBUS_PEER_BROADCAST){
 		avl_for_each_element(&self->clients, id, avl){
 			struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
-			struct ubus_frame *req = ubus_frame_new(target, type, serial, msg);
+			struct ubus_frame *req = ubus_frame_new(type, serial, msg);
 			list_add(&req->list, &client->tx_queue); 
 			//printf("added request to tx_queue!\n"); 
 		}		
@@ -279,7 +305,7 @@ int ubus_socket_send(struct ubus_socket *self, int32_t peer, uint32_t target, in
 		struct ubus_id *id = ubus_id_find(&self->clients, peer); 
 		if(!id) return -1; 
 		struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
-		struct ubus_frame *req = ubus_frame_new(target, type, serial, msg);
+		struct ubus_frame *req = ubus_frame_new(type, serial, msg);
 		list_add(&req->list, &client->tx_queue); 
 	}
 	return 0; 	

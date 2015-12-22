@@ -46,17 +46,17 @@ int main(int argc, char **argv){
 	struct blob_buf buf; 
 	blob_buf_init(&buf, 0, 0); 
 
-	if(ubus_listen(server, "ubus.sock") < 0){
+	if(ubus_listen(server, "127.0.0.1:1234") < 0){
 		fprintf(stderr, "could not start listening on specified socket!\n"); 
 		return -EIO; 
 	}
 
-	if(ubus_connect(client, "ubus.sock") < 0){
+	if(ubus_connect(client, "127.0.0.1:1234") < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
 		return -EIO;
 	}
 
-	if(ubus_connect(user, "ubus.sock") < 0){
+	if(ubus_connect(user, "127.0.0.1:1234") < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
 		return -EIO;
 	}

@@ -5,7 +5,6 @@ SOURCE=\
 	src/ubus_context.c \
 	src/ubus_method.c \
 	src/ubus_object.c \
-	src/ubus_object_type.c \
 	src/ubus_method.c \
 	src/ubus_id.c \
 	src/ubus_peer.c \
