@@ -21,7 +21,6 @@
 #include "ubus_message.h"
 #include "ubus_request.h"
 #include "ubus_method.h"
-#include "ubus_object_type.h"
 #include "ubus_object.h"
 #include "ubus_socket.h"
 #include "ubus_context.h"

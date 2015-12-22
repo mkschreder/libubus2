@@ -15,6 +15,7 @@
 
 #include <blobpack/blobpack.h>
 
+
 struct ubus_request; 
 
 typedef void (*ubus_request_resolve_cb_t)(struct ubus_request *req, struct blob_attr *msg); 
@@ -22,6 +23,7 @@ typedef void (*ubus_request_fail_cb_t)(struct ubus_request *req, int code, struc
 
 struct ubus_request {
 	struct list_head list; 
+	char *bus; 
 	char *client; 
 	char *object; 
 	char *method; 
@@ -36,7 +38,8 @@ struct ubus_request {
 	void *user_data; 
 }; 
 
-struct ubus_request *ubus_request_new(const char *client, const char *object, const char *method, struct blob_attr *msg); 
+#define UBUS_LOCAL_BUS (NULL)
+struct ubus_request *ubus_request_new(const char *bus, const char *client, const char *object, const char *method, struct blob_attr *msg); 
 void ubus_request_delete(struct ubus_request **self); 
 
 static inline void ubus_request_set_userdata(struct ubus_request *self, void *ptr){

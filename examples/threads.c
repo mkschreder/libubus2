@@ -39,7 +39,7 @@ void* client_thread(void *args){
 	ubus_method_add_return(method, "some_table", "a{sv}"); // returns a dictionary
 	
 	ubus_object_add_method(obj, &method); 
-	ubus_dir_publish_object(ctx, &obj); 
+	ubus_publish_object(ctx, &obj); 
 
 	while(true){
 		ubus_handle_events(ctx); 

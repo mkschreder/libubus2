@@ -27,7 +27,7 @@ struct ubus_request;
 
 struct ubus_socket; 
 
-typedef void (*ubus_socket_data_cb_t)(struct ubus_socket *self, uint32_t peer, uint8_t type, uint32_t serial, struct blob_attr *msg);  
+typedef void (*ubus_socket_data_cb_t)(struct ubus_socket *self, uint32_t dst_peer, uint32_t src_peer, uint8_t type, uint32_t serial, struct blob_attr *msg);  
 typedef void (*ubus_socket_client_cb_t)(struct ubus_socket *self, uint32_t peer);  
 
 struct ubus_socket {
@@ -53,7 +53,9 @@ void ubus_socket_destroy(struct ubus_socket *self);
 int ubus_socket_listen(struct ubus_socket *self, const char *path); 
 int ubus_socket_connect(struct ubus_socket *self, const char *path);
 
-int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t serial, struct blob_attr *msg); 
+#define UBUS_TARGET_PEER (0)
+
+int ubus_socket_send(struct ubus_socket *self, int32_t peer, uint32_t target, int type, uint16_t serial, struct blob_attr *msg); 
 static inline void ubus_socket_on_message(struct ubus_socket *self, ubus_socket_data_cb_t cb){
 	self->on_message = cb; 
 }

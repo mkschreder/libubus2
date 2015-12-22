@@ -10,7 +10,6 @@ SOURCE=\
 	src/ubus_id.c \
 	src/ubus_peer.c \
 	src/ubus_request.c \
-	src/ubus_directory.c \
 	src/ubus_socket.c \
 	src/libubus2.c 
 

@@ -18,6 +18,7 @@
 struct ubus_peer {
 	struct avl_node avl_id; 
 	struct avl_node avl_name; 
+	struct avl_tree peers; // child peers 
 	struct avl_tree objects; 
 	char *name; 
 	uint32_t id; 
@@ -28,3 +29,6 @@ void ubus_peer_delete(struct ubus_peer **self);
 
 int ubus_peer_add_object(struct ubus_peer *self, struct ubus_object **obj); 
 void ubus_peer_set_name(struct ubus_peer *self, const char *name); 
+
+int ubus_peer_add_child_peer(struct ubus_peer *self, const char *name, uint32_t id); 
+struct ubus_peer *ubus_peer_find_child_peer(struct ubus_peer *self, const char *name); 

@@ -40,6 +40,7 @@ void _on_request_failed(struct ubus_request *req, int code, struct blob_attr *re
 
 int main(int argc, char **argv){
 	struct ubus_context *client = ubus_new("client"); 
+	struct ubus_context *user = ubus_new("user"); 
 	struct ubus_context *server = ubus_new("server"); 
 
 	struct blob_buf buf; 
@@ -51,6 +52,11 @@ int main(int argc, char **argv){
 	}
 
 	if(ubus_connect(client, "ubus.sock") < 0){
+		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
+		return -EIO;
+	}
+
+	if(ubus_connect(user, "ubus.sock") < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
 		return -EIO;
 	}
@@ -74,14 +80,17 @@ int main(int argc, char **argv){
 	blob_buf_reset(&buf); 
 	blob_buf_put_string(&buf, "argument"); 
 
-	struct ubus_request *req = ubus_request_new("client", "/path/to/object", "my.object.test", blob_buf_head(&buf)); 
+	// TODO: resolve the peer_id of "client" peer on server through user!
+	// we can find out peer_id by looking at the objects on server peer (will be 0 if objects are native to server, otherwise will have ids as they are known to server peer)
+	struct ubus_request *req = ubus_request_new("server", "client", "/path/to/object", "my.object.test", blob_buf_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_request_done); 
 	ubus_request_on_fail(req, &_on_request_failed); 
-	ubus_send_request(server, &req); 
+	ubus_send_request(user, &req); 
 
 	printf("waiting for response!\n"); 
 	while(true){
 		ubus_handle_events(client); 
+		ubus_handle_events(user); 
 		ubus_handle_events(server); 
 	}
 	

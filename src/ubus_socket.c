@@ -193,7 +193,7 @@ void _ubus_client_recv(struct ubus_client *self, struct ubus_socket *socket){
 		if(self->recv_count == (sizeof(struct ubus_msg_header) + self->hdr.data_size)){
 			//printf("full message received %d bytes\n", self->hdr.data_size); 
 			if(socket->on_message){
-				socket->on_message(socket, self->id.id, self->hdr.type, self->hdr.seq, blob_buf_head(&self->data)); 
+				socket->on_message(socket, self->hdr.peer, self->id.id, self->hdr.type, self->hdr.seq, blob_buf_head(&self->data)); 
 			}
 			self->recv_count = 0; 
 		}
@@ -266,12 +266,12 @@ void ubus_socket_poll(struct ubus_socket *self, int timeout){
 	}
 }
 
-int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t serial, struct blob_attr *msg){
+int ubus_socket_send(struct ubus_socket *self, int32_t peer, uint32_t target, int type, uint16_t serial, struct blob_attr *msg){
 	struct ubus_id *id;  
 	if(peer == UBUS_PEER_BROADCAST){
 		avl_for_each_element(&self->clients, id, avl){
 			struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
-			struct ubus_frame *req = ubus_frame_new(0, type, serial, msg);
+			struct ubus_frame *req = ubus_frame_new(target, type, serial, msg);
 			list_add(&req->list, &client->tx_queue); 
 			//printf("added request to tx_queue!\n"); 
 		}		
@@ -279,7 +279,7 @@ int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t 
 		struct ubus_id *id = ubus_id_find(&self->clients, peer); 
 		if(!id) return -1; 
 		struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
-		struct ubus_frame *req = ubus_frame_new(0, type, serial, msg);
+		struct ubus_frame *req = ubus_frame_new(target, type, serial, msg);
 		list_add(&req->list, &client->tx_queue); 
 	}
 	return 0; 	

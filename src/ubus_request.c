@@ -15,8 +15,9 @@
 #include "ubus_request.h"
 #include <blobpack/blobpack.h>
 
-struct ubus_request *ubus_request_new(const char *client, const char *object, const char *method, struct blob_attr *msg){
+struct ubus_request *ubus_request_new(const char *bus, const char *client, const char *object, const char *method, struct blob_attr *msg){
 	struct ubus_request *self = calloc(1, sizeof(struct ubus_request)); 
+	if(bus) self->bus = strdup(bus); 
 	self->client = strdup(client); 
 	self->object = strdup(object); 
 	self->method = strdup(method); 
@@ -27,6 +28,7 @@ struct ubus_request *ubus_request_new(const char *client, const char *object, co
 
 void ubus_request_delete(struct ubus_request **_self){
 	struct ubus_request *self = *_self; 
+	if(self->bus) free(self->bus); 
 	free(self->client); 
 	free(self->object); 
 	free(self->method); 
