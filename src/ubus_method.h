@@ -26,10 +26,12 @@ typedef int (*ubus_request_handler_t)(struct ubus_context *ctx, struct ubus_obje
 			      struct ubus_request *req,
 			      const char *method, struct blob_attr *msg);
 */
-typedef int (*ubus_method_handler_t)(struct ubus_method *self, 
+typedef int (*ubus_method_handler_t)(
+	struct ubus_method *self, 
 	struct ubus_context *ctx, 
-	struct ubus_object *obj, 
-	struct ubus_request *req);
+	struct ubus_object *obj,	// the object that this method belongs to  
+	struct ubus_request *req,	// the original request  
+	struct blob_attr *msg);		// the message of the request 
 
 struct ubus_method {
 	char *name;
@@ -38,10 +40,6 @@ struct ubus_method {
 	
 	// list head for the list of methods (TODO: maybe use avl for this?) 
 	struct list_head list; 
-
-	unsigned long mask;
-	const struct blob_attr_policy *policy;
-	int n_policy;
 };
 
 struct ubus_method *ubus_method_new(const char *name, ubus_method_handler_t cb);  
@@ -55,7 +53,7 @@ void ubus_method_add_return(struct ubus_method *self, const char *name, const ch
 void ubus_method_init(struct ubus_method *self, const char *name, ubus_method_handler_t cb); 
 void ubus_method_destroy(struct ubus_method *self); 
 
-static inline int ubus_method_invoke(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req){
-	if(self->handler) return self->handler(self, ctx, obj, req); 
+static inline int ubus_method_invoke(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req, struct blob_attr *msg){
+	if(self->handler) return self->handler(self, ctx, obj, req, msg); 
 	return 0; 
 }

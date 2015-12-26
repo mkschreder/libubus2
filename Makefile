@@ -9,6 +9,7 @@ SOURCE=\
 	src/ubus_id.c \
 	src/ubus_peer.c \
 	src/ubus_request.c \
+	src/ubus_server.c \
 	src/ubus_socket.c \
 	src/libubus2.c 
 
@@ -19,7 +20,7 @@ OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 CFLAGS+=-g -Isrc -Wall -Werror -std=gnu99
 LDFLAGS+=-lblobpack -lusys -lutype -ljson-c -ldl
 
-all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) socket-example client-example threads-example
+all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) cli-example socket-example client-example threads-example
 
 #extras: 
 #	make -C lua 
@@ -43,6 +44,10 @@ client-example: examples/client.o $(OBJECTS)
 
 socket-example: examples/socket.o $(OBJECTS)
 	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/socket.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+
+cli-example: examples/cli.o $(OBJECTS)
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/cli.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)

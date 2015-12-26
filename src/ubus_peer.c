@@ -29,8 +29,11 @@ struct ubus_peer *ubus_peer_new(const char *key, uint32_t id){
 }
 
 void ubus_peer_delete(struct ubus_peer **_self){
+	assert(_self); 
 	struct ubus_peer *self = *_self; 
 	free(self->name); 
+	free(self); 
+	*_self = NULL; 
 }
 
 void ubus_peer_set_name(struct ubus_peer *self, const char *name){

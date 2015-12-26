@@ -163,51 +163,59 @@ Example message (translated to json):
 Peer Protocol
 -------------
 
-When peers connect to eachother, both ends should send eachother a list of
-objects that their applications have exported locally. The default
-configuration is peer-to-peer. It does not care about whether clients connect
-to you or you connect to another client - the principles of passing messages
-are the same. You can just assume that at any given time you are connected to x
-number of clients who each can be connected to other clients. You can only
-however talk directly to at most the client that is connected to a client you
-also are connected to. The core protocol does not allow you to communicate
-through larger number of hops - although such an abstraction could be
-implemented in application code if it is necessary. 
+The default configuration is peer-to-peer. It does not care about whether
+clients connect to you or you connect to another client - the principles of
+passing messages are the same. Clients can connect to eachother and invoke
+methods on eachothers objects. 
+
+Peers can be named in two ways: either you give a name to an outgoing
+connection, or another peer connects to you and announces their name. Your
+context will automatically assign that name to the actual connection number
+going to the peer. 
 
 	Step 1: peers A and B connect
 		A sends a signal to B that it wants to be called "alice" 
-		B checks if it can grant known name alice to A and if it is possible then B local assigns name alice to connection id that goes to A. 
-		B sends a signal to A telling that it wants to be called "bob" and A goes through the same process of assigning known name to B 
-	Step 2: C connects to B 
-		.. the same process as above is repeated for B and C
-		B sends a signal to A telling it that it has a client called charlie that has local id X on B. 
-		A saves this information for resolving requests going from A to C later
-	Step 3: A wants to do a remote call to an object on C 
-		A looks up peer name charlie on bob using the local database  
-		A sends a message of type METHOD_CALL to B specifying "peer" field in the header to be id of Charlie (instead of 0)
-		B receives the frame with non-zero peer field, replaces peer with 0 and sets return peer to local id of A on B.
-		B forwards the new frame to Charlie. 
-	Step 4: C receives METHOD_CALL from B
-		C receives a message from B with peer set to 0 and source peer set to address of A on B. 
-		C handles the request and prepares reply with peer set to address of A on B 
-		C sends the frame to B which then forwards it to A using the same scheme as above. 
-	Step 5: A receives reply and resolves the local request
-		A receives frame with peer set to 0 and type of METHOD_RETURN (or ERROR). 
-		A looks up matching request based on "sequence" field of the message
-		A resolves the request calling the user callback and deletes the request object. 
+		
+		B checks if it can grant known name alice to A and if it is possible
+		then B local assigns name alice to connection id that goes to A. 
+		
+		B sends a signal to A telling that it wants to be called "bob" and A
+		goes through the same process of assigning known name to B 
+
+	Step 2: A calls method on B
+		A sends a request to B to call method foo on object /bar/test
+
+		B creates a pending reply and invokes the callback for that method
+
+		Callback completes and resolves the request
+		
+		B sends reply to A 
+
+Bus Protocol
+------------
+
+Bus protocol is implemented on top of peer protocol in order to enable several
+clients to use a single connection point where they share their objects. This
+is called a hub or the ubus daemon. 
+
+The hub itself accepts requests from clients and creates objects locally that
+act as proxy objects. When a request comes in to invoke a method on one of
+these proxy objects, the callback automatically creates a new request going out
+to the real destination and connects it to a callback that will take the reply
+and forward it back to the original caller. 
+
+The bus controller itself is implemented as an object: 
+
+/ubus/objects 
+	
+	ubus.objects.publish: takes an object descriptor and publishes a proxy
+	objects locally 
+	
+	ubus.objects.list: lists all currently published objects in
+	the directory.  
 
 Built In Signals 
 ----------------
-
-	ubus.object.add: 
-		[ "ubus.object.add", path, [ signature ] ]
-
-		sent by clients when a local object has been published. 
-
-	ubus.object.delete: 
-		[ "ubus.object.delete", path ]
-		
-		sent by clients when local object is deleted. 
 
 	ubus.peer.well_known_name: 
 		[ "ubus.peer.well_known_name", name ]
@@ -215,11 +223,4 @@ Built In Signals
 		sent by client to announce a name it would like to claim on current
 		connection. If name can not be claimed on the receiving client then
 		this signal should be ignored. 
-
-Bus Protocol 
-------------
-
-When clients are connected to a bus client, additional protocol is required on
-top of ubus to enable forwarding of messages between connected clients. 
-
 

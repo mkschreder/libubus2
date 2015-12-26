@@ -35,8 +35,6 @@ struct ubus_socket {
 
 	int listen_fd;
 
-	struct blob_buf buf; 
-
 	ubus_socket_data_cb_t on_message; 
 	ubus_socket_client_cb_t on_client_connected; 
 
