@@ -35,6 +35,10 @@ void ubus_object_init(struct ubus_object *self, const char *name){
 }
 
 void ubus_object_destroy(struct ubus_object *self){
+	struct ubus_method *m, *tmp; 
+	list_for_each_entry_safe(m, tmp, &self->methods, list){
+		ubus_method_delete(&m); 
+	}
 	free(self->name); 
 }
 

@@ -96,6 +96,12 @@ struct ubus_server *ubus_server_new(const char *name){
 	return self; 
 }
 
+void ubus_server_delete(struct ubus_server **self){
+	ubus_delete(&(*self)->ctx); 
+	free(*self); 
+	*self = NULL; 
+}
+
 int ubus_server_listen(struct ubus_server *self, const char *path){
 	return ubus_listen(self->ctx, path); 
 }

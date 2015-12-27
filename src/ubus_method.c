@@ -27,6 +27,7 @@ struct ubus_method* ubus_method_new(const char *name, ubus_method_handler_t cb){
 
 void ubus_method_delete(struct ubus_method **self){
 	ubus_method_destroy(*self); 
+	free(*self); 
 	*self = NULL; 
 }
 
@@ -39,6 +40,7 @@ void ubus_method_init(struct ubus_method *self, const char *name, ubus_method_ha
 
 void ubus_method_destroy(struct ubus_method *self){
 	if(self->name) free(self->name); 
+	blob_buf_free(&self->signature); 
 	self->handler = 0; 
 }
 

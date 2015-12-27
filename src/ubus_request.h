@@ -14,6 +14,7 @@
 #pragma once
 
 #include <blobpack/blobpack.h>
+#include <libusys/uloop_timeout.h>
 
 
 struct ubus_request; 
@@ -33,6 +34,8 @@ struct ubus_request {
 
 	bool resolved; 
 	bool failed; 
+	
+	utick_t timeout; 
 
 	ubus_request_cb_t on_resolve; 
 	ubus_request_cb_t on_fail; 

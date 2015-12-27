@@ -8,6 +8,8 @@
 
 #include <pthread.h>
 
+static int done = 0; 
+
 static int test_method(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req, struct blob_attr *msg){
 	void *t;
 
@@ -29,6 +31,11 @@ static int test_method(struct ubus_method *self, struct ubus_context *ctx, struc
 	return 0;
 }
 
+static int _app_shutdown(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req, struct blob_attr *msg){
+	done = 1; 
+	return 0; 
+}
+
 void _on_request_done(struct ubus_request *req, struct blob_attr *res){
 	printf("request succeeded! %s\n", req->object); 
 }
@@ -45,10 +52,11 @@ void *_server_thread(void *arg){
 		return NULL; 
 	}
 
-	while(true){
+	while(!done){
 		ubus_server_handle_events(server); 
 	}
 
+	ubus_server_delete(&server); 
 	return NULL; 
 }
 
@@ -77,19 +85,34 @@ void *_client_thread(void *arg){
 
 	ubus_publish_object(client, &obj); 
 
-		// TODO: resolve the peer_id of "client" peer on server through user!
+	// TODO: resolve the peer_id of "client" peer on server through user!
 	// we can find out peer_id by looking at the objects on server peer (will be 0 if objects are native to server, otherwise will have ids as they are known to server peer)
 	struct ubus_request *req = ubus_request_new("ubus", "/ubus/server", "ubus.server.publish", blob_buf_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_request_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(client, &req); 
 
+	obj = ubus_object_new("/app/shutdown"); 
+	method = ubus_method_new("app.shutdown", _app_shutdown); 
+	ubus_object_add_method(obj, &method); 
+
+	blob_buf_reset(&buf); 
+	blob_buf_put_string(&buf, obj->name); 	
+	ubus_object_serialize(obj, &buf); 
+
+	ubus_publish_object(client, &obj); 
+	req = ubus_request_new("ubus", "/ubus/server", "ubus.server.publish", blob_buf_head(&buf)); 
+	ubus_request_on_resolve(req, &_on_request_done); 
+	ubus_request_on_reject(req, &_on_request_failed); 
+	ubus_send_request(client, &req); 
+
 	blob_buf_free(&buf); 
 
-	while(true){
+	while(!done){
 		ubus_handle_events(client); 
 	}
-	
+
+	blob_buf_free(&buf); 
 	ubus_delete(&client); 
 
 	return NULL; 
@@ -123,11 +146,18 @@ int main(int argc, char **argv){
 
 	printf("waiting for response!\n"); 
 
-	while(true){
+	while(!done){
 		ubus_handle_events(user); 
 	}
 	
+	void *res; 
+	pthread_join(client, &res); 
+	pthread_join(server, &res); 
+
+	blob_buf_free(&buf); 
 	ubus_delete(&user);	
+	
+	usleep(100000); 
 
 	return 0;
 }

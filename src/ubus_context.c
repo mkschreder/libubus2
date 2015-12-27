@@ -257,8 +257,8 @@ void ubus_context_destroy(struct ubus_context *self){
 	}
 	
 	// remove all objects
-	struct ubus_object *obj; 
-	avl_for_each_element(&self->objects, obj, avl){
+	struct ubus_object *obj, *optr; 
+	avl_for_each_element_safe(&self->objects, obj, avl, optr){
 		ubus_object_delete(&obj); 
 	}
 
@@ -292,9 +292,13 @@ int ubus_listen(struct ubus_context *self, const char *path){
 static void _ubus_send_pending(struct ubus_context *self){
 	struct ubus_request *req, *tmp; 	
 	list_for_each_entry_safe(req, tmp, &self->requests, list){
-		// check if the request has timed out
-		// TODO
-
+		if(utick_expired(req->timeout)){
+			printf("request timed out!\n"); 
+			list_del_init(&req->list); 
+			ubus_request_reject(req, blob_buf_head(&self->buf)); 
+			ubus_request_delete(&req); 
+			continue; 
+		}
 		// see if we have the target client
 		blob_buf_reset(&self->buf); 
 
@@ -321,6 +325,7 @@ int ubus_send_request(struct ubus_context *self, struct ubus_request **_req){
 	struct ubus_request *req = *_req; 
 	req->seq = self->request_seq++; 
 	//printf("sending request %08x\n", req->seq); 
+	req->timeout = utick_now() + 5000000UL; 
 	list_add(&req->list, &self->requests); 
 	_ubus_send_pending(self); 
 
@@ -345,6 +350,18 @@ int ubus_handle_events(struct ubus_context *self){
 	// try to send out pending requests
 	struct ubus_request *req; 
 	struct ubus_request *tmp; 
+
+	// check if any of the pending requests has timed out
+	list_for_each_entry_safe(req, tmp, &self->pending, list){
+		if(utick_expired(req->timeout)){
+			printf("pending request timed out!\n"); 
+			list_del_init(&req->list); 
+			ubus_request_reject(req, blob_buf_head(&self->buf)); 
+			ubus_request_delete(&req); 
+			continue; 
+		}
+	}
+
 	list_for_each_entry_safe(req, tmp, &self->pending_incoming, list){
 		if(req->failed || req->resolved){
 			//printf("deleting completed request\n");
