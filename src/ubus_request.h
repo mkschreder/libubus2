@@ -22,11 +22,15 @@ typedef void (*ubus_request_cb_t)(struct ubus_request *req, struct blob_attr *ms
 
 struct ubus_request {
 	struct list_head list; 
-	char *client; 
 	char *object; 
 	char *method; 
 	struct blob_buf buf; 
 	uint16_t seq; 
+
+	uint32_t src_id; 
+	char *dst_name; 
+	uint32_t dst_id; 
+
 	bool resolved; 
 	bool failed; 
 

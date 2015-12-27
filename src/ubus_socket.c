@@ -39,6 +39,7 @@ struct ubus_msg_header {
 	uint8_t hdr_size; 	// works as a magic. Must always be sizeof(struct ubus_msg_header)
 	uint8_t type;  		// type of request 
 	uint16_t seq;		// request sequence that is set by sender 
+	uint16_t crc; 		// sum of the data portion
 	uint32_t data_size;	// length of the data that follows 
 } __attribute__((packed)) __attribute__((__aligned__(4))); 
 
@@ -61,6 +62,18 @@ struct ubus_client {
 	//struct list_head rx_queue;
 }; 
 
+uint16_t _crc16(char* data_p, uint32_t length){
+    unsigned char x;
+    uint16_t crc = 0xFFFF;
+
+    while (length--){
+        x = crc >> 8 ^ *data_p++;
+        x ^= x>>4;
+        crc = (crc << 8) ^ ((uint16_t)(x << 12)) ^ ((uint16_t)(x <<5)) ^ ((uint16_t)x);
+    }
+    return crc;
+}
+
 static struct ubus_client *ubus_client_new(int fd){
 	struct ubus_client *self = calloc(1, sizeof(struct ubus_client)); 
 	INIT_LIST_HEAD(&self->tx_queue); 
@@ -71,7 +84,6 @@ static struct ubus_client *ubus_client_new(int fd){
 }
 
 static void ubus_client_delete(struct ubus_client **self){
-	printf("shutting down fd %d\n", (*self)->fd); 
 	shutdown((*self)->fd, SHUT_RDWR); 
 	close((*self)->fd); 
 	blob_buf_free(&(*self)->data); 
@@ -85,6 +97,7 @@ struct ubus_frame *ubus_frame_new(int type, uint16_t seq, struct blob_attr *msg)
 	INIT_LIST_HEAD(&self->list); 
 	self->hdr.type = type;  
 	self->hdr.seq = seq; 
+	self->hdr.crc = _crc16((char*)msg, blob_attr_raw_len(msg)); 
 	//self->hdr.data_size = cpu_to_be32((uint32_t)blob_attr_pad_len(msg)); 
 	//printf("new frame size %d, be: %d\n", blob_attr_pad_len(msg), cpu_to_be32(blob_attr_pad_len(msg))); 
 	self->hdr.data_size = blob_attr_pad_len(msg); 
@@ -116,10 +129,8 @@ void ubus_socket_init(struct ubus_socket *self){
 
 void ubus_socket_destroy(struct ubus_socket *self){
 	struct ubus_id *id, *tmp; 
-	printf("socket destroy!\n"); 
 	avl_for_each_element_safe(&self->clients, id, avl, tmp){
 		struct ubus_client *client = container_of(id, struct ubus_client, id);  
-		printf("deleting peer %08x\n", id->id); 
 		ubus_id_free(&self->clients, &client->id); 
 		ubus_client_delete(&client); 
 	}
@@ -150,8 +161,6 @@ static void _accept_connection(struct ubus_socket *self){
 		if(self->on_client_connected){
 			self->on_client_connected(self, cl->id.id); 
 		}
-		
-		printf("new client: %08x\n", cl->id.id); 
 	} while (!done);
 }
 
@@ -239,8 +248,15 @@ void _ubus_client_recv(struct ubus_client *self, struct ubus_socket *socket){
 		}
 		// if we have received the full message then we call the message callback
 		if(self->recv_count == (sizeof(struct ubus_msg_header) + self->hdr.data_size)){
+			struct blob_attr *msg = blob_buf_head(&self->data); 
+			if(self->hdr.crc != _crc16((char*)msg, blob_attr_raw_len(msg))){
+				fprintf(stderr, "CRC mismatch!\n"); 
+				blob_attr_dump_json(msg); 
+				close(self->fd); 
+				return;  
+			}
 			if(socket->on_message){
-				socket->on_message(socket, self->id.id, self->hdr.type, self->hdr.seq, blob_buf_head(&self->data)); 
+				socket->on_message(socket, self->id.id, self->hdr.type, self->hdr.seq, msg); 
 			}
 			self->recv_count = 0; 
 		}
@@ -309,8 +325,9 @@ void ubus_socket_poll(struct ubus_socket *self, int timeout){
 		for(int c = 1; c < count; c++){
 			if(pfd[c].revents != 0){
 				if(pfd[c].revents & POLLHUP || pfd[c].revents & POLLRDHUP){
-					printf("ERROR: peer hung up!\n"); 
-					ubus_id_free(&self->clients, &clients[c]->id); 
+					//printf("ERROR: peer hung up!\n"); 
+					_ubus_client_recv(clients[c], self); 
+					avl_delete(&self->clients, &clients[c]->id.avl); 
 					ubus_client_delete(&clients[c]); 
 					continue; 
 				} else if(pfd[c].revents & POLLERR){
@@ -331,6 +348,8 @@ int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t 
 			struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
 			struct ubus_frame *req = ubus_frame_new(type, serial, msg);
 			list_add(&req->list, &client->tx_queue); 
+			// try to send as much as we can right away
+			_ubus_client_send(client); 
 			//printf("added request to tx_queue!\n"); 
 		}		
 	} else {
@@ -339,6 +358,7 @@ int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t 
 		struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
 		struct ubus_frame *req = ubus_frame_new(type, serial, msg);
 		list_add(&req->list, &client->tx_queue); 
+		_ubus_client_send(client); 
 	}
 	return 0; 	
 }

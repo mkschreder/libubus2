@@ -11,7 +11,7 @@
 static int test_method(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req, struct blob_attr *msg){
 	void *t;
 
-	printf("TEST METHOD!\n"); 
+	//printf("TEST METHOD!\n"); 
 
 	struct blob_buf bb; 
 	blob_buf_init(&bb, 0, 0);
@@ -29,14 +29,8 @@ static int test_method(struct ubus_method *self, struct ubus_context *ctx, struc
 	return 0;
 }
 
-void _on_list_reply(struct ubus_request *req, struct blob_attr *res){
-	printf("list reply!\n"); 
-	blob_attr_dump_json(res); 
-}
-
 void _on_request_done(struct ubus_request *req, struct blob_attr *res){
 	printf("request succeeded! %s\n", req->object); 
-	blob_attr_dump_json(res); 
 }
 
 void _on_request_failed(struct ubus_request *req, struct blob_attr *res){
@@ -46,7 +40,7 @@ void _on_request_failed(struct ubus_request *req, struct blob_attr *res){
 void *_server_thread(void *arg){
 	struct ubus_server *server = ubus_server_new("ubus"); 
 
-	if(ubus_server_listen(server, "127.0.0.1:1234") < 0){
+	if(ubus_server_listen(server, "./ubus.sock") < 0){
 		fprintf(stderr, "server could not listen on specified socket!\n"); 
 		return NULL; 
 	}
@@ -61,7 +55,7 @@ void *_server_thread(void *arg){
 void *_client_thread(void *arg){
 	struct ubus_context *client = ubus_new("client"); 
 
-	if(ubus_connect(client, "127.0.0.1:1234") < 0){
+	if(ubus_connect(client, "./ubus.sock") < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
 		return NULL;
 	}
@@ -104,10 +98,10 @@ void *_client_thread(void *arg){
 int main(int argc, char **argv){
 	pthread_t server, client; 
 	pthread_create(&server, NULL, _server_thread, NULL); 
+
+	usleep(2000000); 
+
 	pthread_create(&client, NULL, _client_thread, NULL); 
-
-	usleep(200); 
-
 	struct ubus_context *user = ubus_new("user"); 
 
 	struct blob_buf buf; 
@@ -115,7 +109,7 @@ int main(int argc, char **argv){
 
 	signal(SIGPIPE, SIG_IGN); 
 
-	if(ubus_connect(user, "127.0.0.1:1234") < 0){
+	if(ubus_connect(user, "./ubus.sock") < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
 		return -EIO;
 	}
@@ -124,17 +118,6 @@ int main(int argc, char **argv){
 
 	struct ubus_request *req = ubus_request_new("ubus", "/client/path/to/object", "my.object.test", blob_buf_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_request_done); 
-	ubus_request_on_reject(req, &_on_request_failed); 
-	ubus_send_request(user, &req); 
-
-	//printf("connected as %08x\n", ctx->local_id);
-	req = ubus_request_new("ubus", "/ubus/server", "ubus.server.list", blob_buf_head(&buf)); 
-	ubus_request_on_resolve(req, &_on_list_reply); 
-	ubus_request_on_reject(req, &_on_request_failed); 
-	ubus_send_request(user, &req); 
-
-	req = ubus_request_new("ubus", "/client/test/object", "foo", blob_buf_head(&buf)); 
-	ubus_request_on_resolve(req, &_on_list_reply); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(user, &req); 
 

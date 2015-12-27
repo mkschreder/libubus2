@@ -17,7 +17,7 @@
 
 struct ubus_request *ubus_request_new(const char *client, const char *object, const char *method, struct blob_attr *msg){
 	struct ubus_request *self = calloc(1, sizeof(struct ubus_request)); 
-	self->client = strdup(client); 
+	self->dst_name = strdup(client); 
 	self->object = strdup(object); 
 	self->method = strdup(method); 
 	blob_buf_init(&self->buf, 0, 0); 
@@ -27,7 +27,7 @@ struct ubus_request *ubus_request_new(const char *client, const char *object, co
 
 void ubus_request_delete(struct ubus_request **_self){
 	struct ubus_request *self = *_self; 
-	free(self->client); 
+	free(self->dst_name); 
 	free(self->object); 
 	free(self->method); 
 	blob_buf_free(&self->buf); 
