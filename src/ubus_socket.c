@@ -46,7 +46,7 @@ struct ubus_msg_header {
 struct ubus_frame {
 	struct list_head list; 
 	struct ubus_msg_header hdr; 
-	struct blob_buf data; 
+	struct blob data; 
 
 	int send_count; 
 }; 
@@ -58,7 +58,7 @@ struct ubus_client {
 
 	int recv_count; 
 	struct ubus_msg_header hdr; 
-	struct blob_buf data; 
+	struct blob data; 
 	//struct list_head rx_queue;
 }; 
 
@@ -79,33 +79,34 @@ static struct ubus_client *ubus_client_new(int fd){
 	INIT_LIST_HEAD(&self->tx_queue); 
 	self->fd = fd; 
 	self->recv_count = 0; 
-	blob_buf_init(&self->data, 0, 0); 
+	blob_init(&self->data, 0, 0); 
 	return self; 
 }
 
 static void ubus_client_delete(struct ubus_client **self){
 	shutdown((*self)->fd, SHUT_RDWR); 
 	close((*self)->fd); 
-	blob_buf_free(&(*self)->data); 
+	blob_free(&(*self)->data); 
 	free(*self); 
 	*self = NULL;
 }
 
-struct ubus_frame *ubus_frame_new(int type, uint16_t seq, struct blob_attr *msg){
+struct ubus_frame *ubus_frame_new(int type, uint16_t seq, struct blob_field *msg){
+	assert(msg); 
 	struct ubus_frame *self = calloc(1, sizeof(struct ubus_frame)); 
-	blob_buf_init(&self->data, (char*)msg, blob_attr_pad_len(msg)); 
+	blob_init(&self->data, (char*)msg, blob_field_raw_pad_len(msg)); 
 	INIT_LIST_HEAD(&self->list); 
 	self->hdr.type = type;  
 	self->hdr.seq = seq; 
-	self->hdr.crc = _crc16((char*)msg, blob_attr_raw_len(msg)); 
-	//self->hdr.data_size = cpu_to_be32((uint32_t)blob_attr_pad_len(msg)); 
-	//printf("new frame size %d, be: %d\n", blob_attr_pad_len(msg), cpu_to_be32(blob_attr_pad_len(msg))); 
-	self->hdr.data_size = blob_attr_pad_len(msg); 
+	self->hdr.crc = _crc16((char*)msg, blob_field_raw_len(msg)); 
+	//self->hdr.data_size = cpu_to_be32((uint32_t)blob_field_pad_len(msg)); 
+	//printf("new frame size %d, be: %d\n", blob_field_pad_len(msg), cpu_to_be32(blob_field_pad_len(msg))); 
+	self->hdr.data_size = blob_field_raw_pad_len(msg); 
 	return self; 
 }
 
 void ubus_frame_delete(struct ubus_frame **self){
-	blob_buf_free(&(*self)->data); 
+	blob_free(&(*self)->data); 
 	free(*self); 
 	*self = NULL; 
 }
@@ -236,27 +237,34 @@ void _ubus_client_recv(struct ubus_client *self, struct ubus_socket *socket){
 
 		//printf("got frame size %d, correct: %d\n", self->hdr.data_size, be32_to_cpu(self->hdr.data_size)); 
 		//self->hdr.data_size = be32_to_cpu(self->hdr.data_size); 
-		blob_buf_resize(&self->data, self->hdr.data_size); 
+		//printf("receiving message of %d bytes\n", self->hdr.data_size); 
+		if(self->hdr.data_size <= 0){
+			//fprintf(stderr, "protocol error! null message!\n"); 
+			// fail with assertion failure
+			assert(self->hdr.data_size > 0); 
+		}
+		blob_resize(&self->data, self->hdr.data_size); 
 	}
 	// if we have received the header then we receive the body here
 	if(self->recv_count >= sizeof(struct ubus_msg_header)){
 		int rc = 0; 
 		int cursor = self->recv_count - sizeof(struct ubus_msg_header); 
-		while((rc = recv(self->fd, (char*)(blob_buf_head(&self->data)) + cursor, self->hdr.data_size - cursor, 0)) > 0){
+		while((rc = recv(self->fd, (char*)(blob_head(&self->data)) + cursor, self->hdr.data_size - cursor, 0)) > 0){
 			self->recv_count += rc; 
 			cursor = self->recv_count - sizeof(struct ubus_msg_header);
 		}
 		// if we have received the full message then we call the message callback
 		if(self->recv_count == (sizeof(struct ubus_msg_header) + self->hdr.data_size)){
-			struct blob_attr *msg = blob_buf_head(&self->data); 
-			if(self->hdr.crc != _crc16((char*)msg, blob_attr_raw_len(msg))){
+			struct blob_field *msg = blob_head(&self->data); 
+			if(blob_field_data_len(msg) > 0 && self->hdr.crc != _crc16((char*)msg, blob_field_raw_len(msg))){
 				fprintf(stderr, "CRC mismatch!\n"); 
-				blob_attr_dump_json(msg); 
+				//blob_field_dump_json(msg); 
 				close(self->fd); 
 				return;  
-			}
-			if(socket->on_message){
-				socket->on_message(socket, self->id.id, self->hdr.type, self->hdr.seq, msg); 
+			} else {
+				if(socket->on_message){
+					socket->on_message(socket, self->id.id, self->hdr.type, self->hdr.seq, msg); 
+				}
 			}
 			self->recv_count = 0; 
 		}
@@ -279,8 +287,8 @@ void _ubus_client_send(struct ubus_client *self){
 	if(req->send_count >= sizeof(struct ubus_msg_header)){
 		int cursor = req->send_count - sizeof(struct ubus_msg_header); 
 		int sc; 
-		int buf_size = blob_attr_pad_len(blob_buf_head(&req->data)); 
-		while((sc = send(self->fd, blob_buf_head(&req->data) + cursor, buf_size - cursor, MSG_NOSIGNAL)) > 0){
+		int buf_size = blob_field_raw_pad_len(blob_head(&req->data)); 
+		while((sc = send(self->fd, blob_head(&req->data) + cursor, buf_size - cursor, MSG_NOSIGNAL)) > 0){
 			req->send_count += sc; 
 			cursor = req->send_count - sizeof(struct ubus_msg_header);
 		}
@@ -341,7 +349,7 @@ void ubus_socket_poll(struct ubus_socket *self, int timeout){
 	}
 }
 
-int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t serial, struct blob_attr *msg){
+int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t serial, struct blob_field *msg){
 	struct ubus_id *id;  
 	if(peer == UBUS_PEER_BROADCAST){
 		avl_for_each_element(&self->clients, id, avl){

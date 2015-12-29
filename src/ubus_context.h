@@ -30,17 +30,23 @@
 struct ubus_context {
 	struct avl_tree peers_by_id;
 	struct avl_tree peers_by_name;
-	struct avl_tree objects; 
+
+	struct avl_tree objects_by_name; 
+	struct avl_tree objects_by_id; 
+
 	struct list_head requests;
 	struct list_head pending; 
 	struct list_head pending_incoming; 
+
 	struct ubus_socket socket; 
 
 	uint16_t request_seq;
 
-	struct blob_buf buf; 
+	struct blob buf; 
 
 	char *name; // connection name for this context
+
+	void *user_data; 
 };
 
 struct ubus_context *ubus_new(const char *name);
@@ -49,5 +55,8 @@ int ubus_connect(struct ubus_context *self, const char *path);
 int ubus_listen(struct ubus_context *self, const char *path); 
 
 int ubus_send_request(struct ubus_context *self, struct ubus_request **req); 
-int ubus_publish_object(struct ubus_context *self, struct ubus_object **obj); 
+uint32_t ubus_add_object(struct ubus_context *self, struct ubus_object **obj); 
 int ubus_handle_events(struct ubus_context *self); 
+
+static inline void ubus_set_userdata(struct ubus_context *self, void *ptr){ self->user_data = ptr; }
+static inline void *ubus_get_userdata(struct ubus_context *self) { return self->user_data; }

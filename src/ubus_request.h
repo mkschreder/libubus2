@@ -19,13 +19,13 @@
 
 struct ubus_request; 
 
-typedef void (*ubus_request_cb_t)(struct ubus_request *req, struct blob_attr *msg); 
+typedef void (*ubus_request_cb_t)(struct ubus_request *req, struct blob_field *msg); 
 
 struct ubus_request {
 	struct list_head list; 
 	char *object; 
 	char *method; 
-	struct blob_buf buf; 
+	struct blob buf; 
 	uint16_t seq; 
 
 	uint32_t src_id; 
@@ -44,7 +44,7 @@ struct ubus_request {
 }; 
 
 #define UBUS_LOCAL_BUS (NULL)
-struct ubus_request *ubus_request_new(const char *client, const char *object, const char *method, struct blob_attr *msg); 
+struct ubus_request *ubus_request_new(const char *client, const char *object, const char *method, struct blob_field *msg); 
 void ubus_request_delete(struct ubus_request **self); 
 
 static inline void ubus_request_set_userdata(struct ubus_request *self, void *ptr){
@@ -55,12 +55,8 @@ static inline void* ubus_request_get_userdata(struct ubus_request *self) {
 	return self->user_data; 
 }
 
-static inline void ubus_request_resolve(struct ubus_request *self, struct blob_attr *msg){
-	if(self->on_resolve) self->on_resolve(self, msg); 
-	self->resolved = true; 
-}
-
-void ubus_request_reject(struct ubus_request *self, struct blob_attr *msg); 
+void ubus_request_resolve(struct ubus_request *self, struct blob_field *msg); 
+void ubus_request_reject(struct ubus_request *self, struct blob_field *msg); 
 
 static inline void ubus_request_on_resolve(struct ubus_request *self, ubus_request_cb_t cb){
 	self->on_resolve = cb; 

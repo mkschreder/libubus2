@@ -2,6 +2,7 @@
 
 struct ubus_server {
 	struct ubus_context *ctx; 
+	struct list_head objects; 
 }; 
 
 struct ubus_server *ubus_server_new(const char *name); 

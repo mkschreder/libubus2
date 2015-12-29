@@ -35,28 +35,28 @@ void ubus_method_init(struct ubus_method *self, const char *name, ubus_method_ha
 	if(name) self->name = strdup(name); 
 	else self->name = 0; 
 	self->handler = cb; 
-	blob_buf_init(&self->signature, 0, 0); 
+	blob_init(&self->signature, 0, 0); 
 }
 
 void ubus_method_destroy(struct ubus_method *self){
 	if(self->name) free(self->name); 
-	blob_buf_free(&self->signature); 
+	blob_free(&self->signature); 
 	self->handler = 0; 
 }
 
 void ubus_method_add_param(struct ubus_method *self, const char *name, const char *signature){
-	blob_offset_t ofs = blob_buf_open_array(&self->signature); 
-		blob_buf_put_i8(&self->signature, UBUS_METHOD_PARAM_IN); 
-		blob_buf_put_string(&self->signature, name); 
-		blob_buf_put_string(&self->signature, signature); 
-	blob_buf_close_array(&self->signature, ofs); 
+	blob_offset_t ofs = blob_open_array(&self->signature); 
+		blob_put_int(&self->signature, UBUS_METHOD_PARAM_IN); 
+		blob_put_string(&self->signature, name); 
+		blob_put_string(&self->signature, signature); 
+	blob_close_array(&self->signature, ofs); 
 }
 
 void ubus_method_add_return(struct ubus_method *self, const char *name, const char *signature){
-	blob_offset_t ofs = blob_buf_open_array(&self->signature); 
-		blob_buf_put_i8(&self->signature, UBUS_METHOD_PARAM_OUT); 
-		blob_buf_put_string(&self->signature, name); 
-		blob_buf_put_string(&self->signature, signature); 
-	blob_buf_close_array(&self->signature, ofs); 
+	blob_offset_t ofs = blob_open_array(&self->signature); 
+		blob_put_int(&self->signature, UBUS_METHOD_PARAM_OUT); 
+		blob_put_string(&self->signature, name); 
+		blob_put_string(&self->signature, signature); 
+	blob_close_array(&self->signature, ofs); 
 }
 

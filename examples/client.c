@@ -10,37 +10,38 @@
 
 static int done = 0; 
 
-static int test_method(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req, struct blob_attr *msg){
+static int test_method(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req, struct blob_field *msg){
 	void *t;
 
 	//printf("TEST METHOD!\n"); 
 
-	struct blob_buf bb; 
-	blob_buf_init(&bb, 0, 0);
+	struct blob bb; 
+	blob_init(&bb, 0, 0);
 
-	t = blob_buf_open_table(&bb);
-	blob_buf_put_string(&bb, "foo"); 
-	blob_buf_put_string(&bb, "data"); 
-	blob_buf_put_string(&bb, "bar"); 
-	blob_buf_put_u32(&bb, 11);
-	blob_buf_close_table(&bb, t);
+	t = blob_open_table(&bb);
+	blob_put_string(&bb, "foo"); 
+	blob_put_string(&bb, "data"); 
+	blob_put_string(&bb, "bar"); 
+	blob_put_int(&bb, 11);
+	blob_close_table(&bb, t);
 
-	ubus_request_resolve(req, blob_buf_head(&bb)); 
+	ubus_request_resolve(req, blob_head(&bb)); 
 
-	blob_buf_free(&bb); 
+	blob_free(&bb); 
 	return 0;
 }
 
-static int _app_shutdown(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req, struct blob_attr *msg){
+static int _app_shutdown(struct ubus_method *self, struct ubus_context *ctx, struct ubus_object *obj, struct ubus_request *req, struct blob_field *msg){
 	done = 1; 
 	return 0; 
 }
 
-void _on_request_done(struct ubus_request *req, struct blob_attr *res){
-	printf("request succeeded! %s\n", req->object); 
+void _on_request_done(struct ubus_request *req, struct blob_field *res){
+	printf("request succeeded! %s %s\n", req->object, req->method); 
+	blob_field_dump_json_pretty(res); 
 }
 
-void _on_request_failed(struct ubus_request *req, struct blob_attr *res){
+void _on_request_failed(struct ubus_request *req, struct blob_field *res){
 	printf("request failed!\n"); 
 }
 
@@ -78,16 +79,16 @@ void *_client_thread(void *arg){
  	
 	ubus_object_add_method(obj, &method); 
 
-	struct blob_buf buf; 
-	blob_buf_init(&buf, 0, 0); 
-	blob_buf_put_string(&buf, obj->name); 	
+	struct blob buf; 
+	blob_init(&buf, 0, 0); 
+	blob_put_string(&buf, obj->name); 	
 	ubus_object_serialize(obj, &buf); 
 
-	ubus_publish_object(client, &obj); 
+	ubus_add_object(client, &obj); 
 
 	// TODO: resolve the peer_id of "client" peer on server through user!
 	// we can find out peer_id by looking at the objects on server peer (will be 0 if objects are native to server, otherwise will have ids as they are known to server peer)
-	struct ubus_request *req = ubus_request_new("ubus", "/ubus/server", "ubus.server.publish", blob_buf_head(&buf)); 
+	struct ubus_request *req = ubus_request_new("ubus", "/ubus/server", "ubus.server.publish", blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_request_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(client, &req); 
@@ -96,23 +97,23 @@ void *_client_thread(void *arg){
 	method = ubus_method_new("app.shutdown", _app_shutdown); 
 	ubus_object_add_method(obj, &method); 
 
-	blob_buf_reset(&buf); 
-	blob_buf_put_string(&buf, obj->name); 	
+	blob_reset(&buf); 
+	blob_put_string(&buf, obj->name); 	
 	ubus_object_serialize(obj, &buf); 
 
-	ubus_publish_object(client, &obj); 
-	req = ubus_request_new("ubus", "/ubus/server", "ubus.server.publish", blob_buf_head(&buf)); 
+	ubus_add_object(client, &obj); 
+	req = ubus_request_new("ubus", "/ubus/server", "ubus.server.publish", blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_request_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(client, &req); 
 
-	blob_buf_free(&buf); 
+	blob_free(&buf); 
 
 	while(!done){
 		ubus_handle_events(client); 
 	}
 
-	blob_buf_free(&buf); 
+	blob_free(&buf); 
 	ubus_delete(&client); 
 
 	return NULL; 
@@ -127,8 +128,8 @@ int main(int argc, char **argv){
 	pthread_create(&client, NULL, _client_thread, NULL); 
 	struct ubus_context *user = ubus_new("user"); 
 
-	struct blob_buf buf; 
-	blob_buf_init(&buf, 0, 0); 
+	struct blob buf; 
+	blob_init(&buf, 0, 0); 
 
 	signal(SIGPIPE, SIG_IGN); 
 
@@ -139,7 +140,7 @@ int main(int argc, char **argv){
 
 	sleep(1); 
 
-	struct ubus_request *req = ubus_request_new("ubus", "/client/path/to/object", "my.object.test", blob_buf_head(&buf)); 
+	struct ubus_request *req = ubus_request_new("ubus", "/client/path/to/object", "my.object.test", blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_request_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(user, &req); 
@@ -154,7 +155,7 @@ int main(int argc, char **argv){
 	pthread_join(client, &res); 
 	pthread_join(server, &res); 
 
-	blob_buf_free(&buf); 
+	blob_free(&buf); 
 	ubus_delete(&user);	
 	
 	usleep(100000); 

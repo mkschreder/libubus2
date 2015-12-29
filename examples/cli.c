@@ -28,75 +28,75 @@ static int usage(const char *prog)
 	return 1;
 }
 
-void _on_call_done(struct ubus_request *req, struct blob_attr *res){
-	blob_attr_dump_json(res); 
+void _on_call_done(struct ubus_request *req, struct blob_field *res){
+	blob_field_dump_json(res); 
 	done = 1; 
 }
 
-void _on_list_done(struct ubus_request *req, struct blob_attr *res){
-	if(!blob_attr_validate(res, "s[sa]")) {
+void _on_list_done(struct ubus_request *req, struct blob_field *res){
+	if(!blob_field_validate(res, "s[sa]")) {
 		fprintf(stderr, "Invalid data returned from server!\n"); 
-		blob_attr_dump_json(res); 
+		blob_field_dump_json(res); 
 		return; 
 	}
 	
-	struct blob_attr *key, *value; 
-	blob_attr_for_each_kv(res, key, value){
-		printf("%s\n", blob_attr_get_string(key)); 
-		struct blob_attr *mname, *margs; 
-		blob_attr_for_each_kv(value, mname, margs){
+	struct blob_field *key, *value; 
+	blob_field_for_each_kv(res, key, value){
+		printf("%s\n", blob_field_get_string(key)); 
+		struct blob_field *mname, *margs; 
+		blob_field_for_each_kv(value, mname, margs){
 			char sig[255] = {0}, sig_ret[255] = {0}; 
-			struct blob_attr *arg, *fields[3]; 
-			blob_attr_for_each_child(margs, arg){
-				blob_attr_parse(arg, "iss", fields, 3); 	
-				switch(blob_attr_get_i8(fields[0])){
-					case UBUS_METHOD_PARAM_IN: strncat(sig, blob_attr_get_string(fields[2]), sizeof(sig)); break; 
-					case UBUS_METHOD_PARAM_OUT: strncat(sig_ret, blob_attr_get_string(fields[2]), sizeof(sig_ret)); break; 
+			struct blob_field *arg, *fields[3]; 
+			blob_field_for_each_child(margs, arg){
+				blob_field_parse(arg, "iss", fields, 3); 	
+				switch(blob_field_get_int(fields[0])){
+					case UBUS_METHOD_PARAM_IN: strncat(sig, blob_field_get_string(fields[2]), sizeof(sig)); break; 
+					case UBUS_METHOD_PARAM_OUT: strncat(sig_ret, blob_field_get_string(fields[2]), sizeof(sig_ret)); break; 
 				}
 			}
 			if(strlen(sig) == 0) strcpy(sig, "void"); 
 			if(strlen(sig_ret) == 0) strcpy(sig_ret, "void"); 
-			printf("\t%-30s(ARGS: %s, RETURN: %s)\n", blob_attr_get_string(mname), sig, sig_ret); 	
-			blob_attr_for_each_child(margs, arg){
-				blob_attr_parse(arg, "iss", fields, 3); 	
+			printf("\t%-30s(ARGS: %s, RETURN: %s)\n", blob_field_get_string(mname), sig, sig_ret); 	
+			blob_field_for_each_child(margs, arg){
+				blob_field_parse(arg, "iss", fields, 3); 	
 				printf("\t\t"); 
-				if(blob_attr_get_i8(fields[0]) == UBUS_METHOD_PARAM_IN) printf("IN: "); 
-				else if(blob_attr_get_i8(fields[0]) == UBUS_METHOD_PARAM_OUT) printf("OUT: "); 
-				printf("%s '%s'\n", blob_attr_get_string(fields[1]), blob_attr_get_string(fields[2])); 
+				if(blob_field_get_int(fields[0]) == UBUS_METHOD_PARAM_IN) printf("IN: "); 
+				else if(blob_field_get_int(fields[0]) == UBUS_METHOD_PARAM_OUT) printf("OUT: "); 
+				printf("%s '%s'\n", blob_field_get_string(fields[1]), blob_field_get_string(fields[2])); 
 			}
 		}
 	}
 	done = 1; 
 }
 
-void _on_request_failed(struct ubus_request *req, struct blob_attr *res){
+void _on_request_failed(struct ubus_request *req, struct blob_field *res){
 	printf("request failed!\n"); 
 	done = 1; 
 }
 
 static int _command_list(struct ubus_context *ctx, int argc, char **argv){
-	struct blob_buf buf; 
-	blob_buf_init(&buf, 0, 0); 
-	struct ubus_request *req = ubus_request_new("ubus", "/ubus/server", "ubus.server.list", blob_buf_head(&buf)); 
+	struct blob buf; 
+	blob_init(&buf, 0, 0); 
+	struct ubus_request *req = ubus_request_new("ubus", "/ubus/server", "ubus.server.list", blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_list_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(ctx, &req); 
-	blob_buf_free(&buf); 
+	blob_free(&buf); 
 
 	return 0; 
 }
 
 static int _command_call(struct ubus_context *ctx, int argc, char **argv){
-	struct blob_buf buf; 
-	blob_buf_init(&buf, 0, 0); 
+	struct blob buf; 
+	blob_init(&buf, 0, 0); 
 	if(argc < 3) return usage("prog"); 
 	if(argc == 4)
-		blob_buf_add_json_from_string(&buf, argv[3]); 
-	struct ubus_request *req = ubus_request_new(argv[0], argv[1], argv[2], blob_buf_head(&buf)); 
+		blob_put_json_from_string(&buf, argv[3]); 
+	struct ubus_request *req = ubus_request_new(argv[0], argv[1], argv[2], blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_call_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(ctx, &req); 
-	blob_buf_free(&buf); 
+	blob_free(&buf); 
 	return 0; 
 }
 

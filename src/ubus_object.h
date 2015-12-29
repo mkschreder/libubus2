@@ -16,13 +16,16 @@
 
 #include <inttypes.h>
 #include <libutype/avl.h>
+#include "ubus_id.h"
 
-struct blob_buf; 
+struct blob; 
 struct ubus_context; 
 struct ubus_method; 
 
 struct ubus_object {
 	struct avl_node avl;
+	struct ubus_id id; 
+
 	char *name;
 
 	struct list_head methods; 
@@ -41,8 +44,9 @@ struct ubus_method *ubus_object_find_method(struct ubus_object *obj, const char 
 void ubus_object_publish_method(struct ubus_object *obj, struct ubus_method **method); 
 
 static inline void ubus_object_set_userdata(struct ubus_object *self, void *ptr) { self->priv = ptr; }
+static inline void* ubus_object_get_userdata(struct ubus_object *self) { return self->priv;  }
 
-void ubus_object_serialize(struct ubus_object *obj, struct blob_buf *buf); 
+void ubus_object_serialize(struct ubus_object *obj, struct blob *buf); 
 
 
 

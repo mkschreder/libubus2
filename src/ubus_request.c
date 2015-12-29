@@ -15,13 +15,13 @@
 #include "ubus_request.h"
 #include <blobpack/blobpack.h>
 
-struct ubus_request *ubus_request_new(const char *client, const char *object, const char *method, struct blob_attr *msg){
+struct ubus_request *ubus_request_new(const char *client, const char *object, const char *method, struct blob_field *msg){
 	struct ubus_request *self = calloc(1, sizeof(struct ubus_request)); 
 	self->dst_name = strdup(client); 
 	self->object = strdup(object); 
 	self->method = strdup(method); 
-	blob_buf_init(&self->buf, 0, 0); 
-	blob_buf_put_attr(&self->buf, msg); 
+	blob_init(&self->buf, 0, 0); 
+	blob_put_attr(&self->buf, msg); 
 	return self; 
 }
 
@@ -30,12 +30,27 @@ void ubus_request_delete(struct ubus_request **_self){
 	free(self->dst_name); 
 	free(self->object); 
 	free(self->method); 
-	blob_buf_free(&self->buf); 
+	blob_free(&self->buf); 
 	free(self); 
 	*_self = NULL; 
 }
 
-void ubus_request_reject(struct ubus_request *self, struct blob_attr *msg){
+void ubus_request_resolve(struct ubus_request *self, struct blob_field *msg){
+	// TODO: decide whether we should have it like this
+	if(!msg){
+		blob_reset(&self->buf); 
+		msg = blob_head(&self->buf); 
+	}
+	if(self->on_resolve) self->on_resolve(self, msg); 
+	self->resolved = true; 
+}
+
+void ubus_request_reject(struct ubus_request *self, struct blob_field *msg){
+	// TODO: decide whether we should have it like this
+	if(!msg){
+		blob_reset(&self->buf); 
+		msg = blob_head(&self->buf); 
+	}
 	if(self->on_fail) self->on_fail(self, msg); 
 	self->failed = true; 
 }
