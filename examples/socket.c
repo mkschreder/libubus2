@@ -39,12 +39,12 @@ int main(int argc, char **argv){
 	
 	printf("trying to connect..\n"); 
 
-	if(ubus_socket_connect(client2, "client1.sock") < 0){
+	if(ubus_socket_connect(client2, "client1.sock", NULL) < 0){
 		printf("client2: could not connect!\n"); 
 	}
 	
 	printf("client3 connecting..\n"); 
-	if(ubus_socket_connect(client3, "client1.sock") < 0){
+	if(ubus_socket_connect(client3, "client1.sock", NULL) < 0){
 		printf("client3: could not connect!\n"); 
 	}
 

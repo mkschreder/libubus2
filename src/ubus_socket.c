@@ -198,7 +198,7 @@ int ubus_socket_listen(struct ubus_socket *self, const char *_address){
 	return 0; 
 }
 
-int ubus_socket_connect(struct ubus_socket *self, const char *_address){
+int ubus_socket_connect(struct ubus_socket *self, const char *_address, uint32_t *id){
 	int flags = 0; 
 	int addrlen = strlen(_address); 
 	char *address = alloca(addrlen); 
@@ -219,6 +219,8 @@ int ubus_socket_connect(struct ubus_socket *self, const char *_address){
 	if(self->on_client_connected){
 		self->on_client_connected(self, cl->id.id); 
 	}
+
+	if(id) *id = cl->id.id; 
 
 	return 0; 
 }

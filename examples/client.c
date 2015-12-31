@@ -64,7 +64,7 @@ void *_server_thread(void *arg){
 void *_client_thread(void *arg){
 	struct ubus_context *client = ubus_new("client"); 
 
-	if(ubus_connect(client, "./ubus.sock") < 0){
+	if(ubus_connect(client, "./ubus.sock", NULL) < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
 		return NULL;
 	}
@@ -133,7 +133,7 @@ int main(int argc, char **argv){
 
 	signal(SIGPIPE, SIG_IGN); 
 
-	if(ubus_connect(user, "./ubus.sock") < 0){
+	if(ubus_connect(user, "./ubus.sock", NULL) < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
 		return -EIO;
 	}

@@ -168,10 +168,31 @@ clients connect to you or you connect to another client - the principles of
 passing messages are the same. Clients can connect to eachother and invoke
 methods on eachothers objects. 
 
-Peers can be named in two ways: either you give a name to an outgoing
-connection, or another peer connects to you and announces their name. Your
-context will automatically assign that name to the actual connection number
-going to the peer. 
+Peer Indexing 
+.............
+
+Peers shall be indexed by both name and id. Id indexing is to be used for fast
+lookups within application and for easily storing object id without having to
+copy strings. Names are to be used for looking up objects based on user input. 
+
+It should be possible to set name of outgoing peer connection when setting up
+the connection and subsequent attempts by the peer to set it's name on current
+client should be ignored if the name has been set locally. If the name has not
+been set, then it should be possible for the peer to set it's name by which it
+wishes to be found on the current local context. This should be done by sending
+name set notification from peer to local client.  
+
+Peer Authentication
+...................
+
+Should authentication be part of core peer protocol or layered on top of it? 
+
+Peer Introspection
+..................
+
+Each peer shall expose an introspection method to connecting peers to allow listing exported objects. 
+
+	example: 
 
 	Step 1: peers A and B connect
 		A sends a signal to B that it wants to be called "alice" 

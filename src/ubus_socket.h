@@ -49,7 +49,7 @@ void ubus_socket_init(struct ubus_socket *self);
 void ubus_socket_destroy(struct ubus_socket *self); 
 
 int ubus_socket_listen(struct ubus_socket *self, const char *path); 
-int ubus_socket_connect(struct ubus_socket *self, const char *path);
+int ubus_socket_connect(struct ubus_socket *self, const char *path, uint32_t *id);
 
 #define UBUS_TARGET_PEER (0)
 

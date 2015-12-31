@@ -51,12 +51,16 @@ struct ubus_context {
 
 struct ubus_context *ubus_new(const char *name);
 void ubus_delete(struct ubus_context **self); 
-int ubus_connect(struct ubus_context *self, const char *path); 
+int ubus_connect(struct ubus_context *self, const char *path, uint32_t *peer_id); 
+int ubus_set_peer_localname(struct ubus_context *self, uint32_t peer, const char *localname); 
+
 int ubus_listen(struct ubus_context *self, const char *path); 
 
 int ubus_send_request(struct ubus_context *self, struct ubus_request **req); 
 uint32_t ubus_add_object(struct ubus_context *self, struct ubus_object **obj); 
 int ubus_handle_events(struct ubus_context *self); 
+
+const char *ubus_status_to_string(int8_t status); 
 
 static inline void ubus_set_userdata(struct ubus_context *self, void *ptr){ self->user_data = ptr; }
 static inline void *ubus_get_userdata(struct ubus_context *self) { return self->user_data; }

@@ -70,14 +70,20 @@ void _on_list_done(struct ubus_request *req, struct blob_field *res){
 }
 
 void _on_request_failed(struct ubus_request *req, struct blob_field *res){
-	printf("request failed!\n"); 
+	struct blob_field *code = blob_field_first_child(res); 
+	if(!blob_field_validate(code, "i")){
+		fprintf(stderr, "request failed, invalid error message!\n"); 
+		return; 
+	}
+	int c = blob_field_get_int(blob_field_first_child(code)); 
+	printf("request failed: %s\n", ubus_status_to_string(c)); 
 	done = 1; 
 }
 
 static int _command_list(struct ubus_context *ctx, int argc, char **argv){
 	struct blob buf; 
 	blob_init(&buf, 0, 0); 
-	struct ubus_request *req = ubus_request_new("ubus", "/ubus/server", "ubus.server.list", blob_head(&buf)); 
+	struct ubus_request *req = ubus_request_new("server", "/ubus/peer", "ubus.peer.list", blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_list_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(ctx, &req); 
@@ -89,10 +95,10 @@ static int _command_list(struct ubus_context *ctx, int argc, char **argv){
 static int _command_call(struct ubus_context *ctx, int argc, char **argv){
 	struct blob buf; 
 	blob_init(&buf, 0, 0); 
-	if(argc < 3) return usage("prog"); 
-	if(argc == 4)
-		blob_put_json_from_string(&buf, argv[3]); 
-	struct ubus_request *req = ubus_request_new(argv[0], argv[1], argv[2], blob_head(&buf)); 
+	if(argc < 2) return usage("prog"); 
+	if(argc == 3)
+		blob_put_json_from_string(&buf, argv[2]); 
+	struct ubus_request *req = ubus_request_new("server", argv[0], argv[1], blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_call_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(ctx, &req); 
@@ -144,11 +150,14 @@ int main(int argc, char **argv)
 		return usage(progname);
 
 	struct ubus_context *ctx = ubus_new("ubus-cli"); 
-	if(ubus_connect(ctx, ubus_socket) < 0){
+	uint32_t id = 0; 
+	if(ubus_connect(ctx, ubus_socket, &id) < 0){
 		if (!simple_output)
 			fprintf(stderr, "Failed to connect to ubus\n");
 		return -1;
 	}
+	
+	ubus_set_peer_localname(ctx, id, "server"); 
 
 	argv++;
 	argc--;

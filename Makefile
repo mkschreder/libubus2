@@ -3,6 +3,7 @@ STATIC_LIB=libubus2.a
 SHARED_LIB=libubus2.so 
 SOURCE=\
 	src/ubus_context.c \
+	src/ubus_client.c \
 	src/ubus_method.c \
 	src/ubus_object.c \
 	src/ubus_method.c \

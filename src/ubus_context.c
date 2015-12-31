@@ -61,9 +61,14 @@ void _on_msg_signal(struct ubus_context *self, struct ubus_peer *peer, uint16_t 
 
 	if(strcmp(signal_name, "ubus.peer.well_known_name") == 0){
 		attr = blob_field_next_child(msg, attr); 
+		const char *peer_name = blob_field_get_string(attr); 	
+
+		// do not allow changing name!
+		struct avl_node *avl = avl_find(&self->peers_by_name, peer_name); 
+		if(avl) return; 
+		
 		avl_delete(&self->peers_by_name, &peer->avl_name); 
-		//printf("setting name of %s to %s\n",(char*)peer->avl_name.key, blob_field_get_string(attr)); 
-		ubus_peer_set_name(peer, blob_field_get_string(attr)); 
+		ubus_peer_set_name(peer, peer_name); 
 		if(0 != avl_insert(&self->peers_by_name, &peer->avl_name)){
 			// TODO: handle duplicates
 		}
@@ -108,7 +113,7 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 	struct ubus_object *obj = _find_object_by_name(self, object); 
 	if(!obj){
 		//printf("object %s not found!\n", object); 
-		blob_put_int(&buf, UBUS_STATUS_METHOD_NOT_FOUND); 
+		blob_put_int(&buf, UBUS_STATUS_NOT_FOUND); 
 		goto reject;
 	}
 
@@ -132,6 +137,7 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 
 	int ret = 0; 
 	if((ret = ubus_method_invoke(m, self, obj, req, attr)) != 0){
+		blob_reset(&buf); 
 		blob_put_int(&buf, ret); 
 		blob_put_string(&buf, object); 
 		blob_put_string(&buf, method); 
@@ -143,6 +149,7 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 	}
 	goto free; 
 reject: 
+	//ubus_request_reject(req, blob_head(&buf)); 
 	ubus_socket_send(&self->socket, peer->id, UBUS_MSG_ERROR, serial, blob_head(&buf));  
 free: 
 	blob_free(&buf); 
@@ -287,13 +294,22 @@ void ubus_delete(struct ubus_context **self){
 	*self = NULL; 
 }
 
-int ubus_connect(struct ubus_context *self, const char *path){
+int ubus_connect(struct ubus_context *self, const char *path, uint32_t *peer_id){
 	if(!path) path = UBUS_DEFAULT_SOCKET; 
-	return ubus_socket_connect(&self->socket, path); 
+	return ubus_socket_connect(&self->socket, path, peer_id); 
 }
 
 int ubus_listen(struct ubus_context *self, const char *path){
 	return ubus_socket_listen(&self->socket, path); 	
+}
+
+int ubus_set_peer_localname(struct ubus_context *self, uint32_t peer_id, const char *localname){
+	struct ubus_peer *peer = _find_peer_by_id(self, peer_id);  
+	if(!peer) return -1; 
+	if(peer->avl_name.key && strlen(peer->avl_name.key) > 0) 
+		avl_delete(&self->peers_by_name, &peer->avl_name); 
+	ubus_peer_set_name(peer, localname); 
+	return avl_insert(&self->peers_by_name, &peer->avl_name); 
 }
 
 static void _ubus_send_pending(struct ubus_context *self){
@@ -384,3 +400,22 @@ int ubus_handle_events(struct ubus_context *self){
 	ubus_socket_poll(&self->socket, 0); 
 	return 0; 
 }
+
+const char *ubus_status_to_string(int8_t status){
+	static const char *code[] = {
+		"UBUS_STATUS_OK",
+		"UBUS_STATUS_INVALID_COMMAND",
+		"UBUS_STATUS_INVALID_ARGUMENT",
+		"UBUS_STATUS_METHOD_NOT_FOUND",
+		"UBUS_STATUS_NOT_FOUND",
+		"UBUS_STATUS_NO_DATA",
+		"UBUS_STATUS_PERMISSION_DENIED",
+		"UBUS_STATUS_TIMEOUT",
+		"UBUS_STATUS_NOT_SUPPORTED",
+		"UBUS_STATUS_UNKNOWN_ERROR",
+		"UBUS_STATUS_CONNECTION_FAILED"
+	}; 
+	if(status < 0 || status > sizeof(code) / sizeof(code[0])) status = UBUS_STATUS_UNKNOWN_ERROR; 
+	return code[status]; 
+}
+
