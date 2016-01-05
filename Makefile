@@ -12,6 +12,7 @@ SOURCE=\
 	src/ubus_request.c \
 	src/ubus_server.c \
 	src/ubus_rawsocket.c \
+	src/ubus_proxy.c \
 	src/libubus2.c \
 	websocket/ubus_websocket.c
 

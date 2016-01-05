@@ -8,15 +8,21 @@ void _on_message(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t ser
 }
 
 int main(int argc, char **argv){
-	ubus_socket_t sock = ubus_websocket_new(); 
-	struct ubus_server *server = ubus_server_new("ubus", &sock); 
+	ubus_socket_t insock = ubus_websocket_new(); 
+	ubus_socket_t outsock = ubus_rawsocket_new(); 
+	struct ubus_proxy *proxy = ubus_proxy_new(); 
+	ubus_proxy_listen(proxy, insock, "localhost:1234"); 
+	ubus_proxy_connect(proxy, outsock, "localhost:1235"); 
 
-	if(ubus_server_listen(server, "localhost:1234") < 0){
+	struct ubus_server *server = ubus_server_new("ubus", NULL); 
+
+	if(ubus_server_listen(server, "localhost:1235") < 0){
 		fprintf(stderr, "server could not listen on specified socket!\n"); 
 		return 0; 
 	}
 
 	while(true){
+		ubus_proxy_handle_events(proxy); 
 		ubus_server_handle_events(server); 
 	}
 

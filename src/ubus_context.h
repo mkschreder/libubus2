@@ -24,6 +24,7 @@
 #include "ubus_object.h"
 #include "ubus_socket.h"
 #include "ubus_rawsocket.h"
+#include "ubus_proxy.h"
 #include "ubus_context.h"
 
 #define UBUS_DEFAULT_SOCKET "/var/run/ubus.sock"
