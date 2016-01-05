@@ -11,17 +11,18 @@ SOURCE=\
 	src/ubus_peer.c \
 	src/ubus_request.c \
 	src/ubus_server.c \
-	src/ubus_socket.c \
-	src/libubus2.c 
+	src/ubus_rawsocket.c \
+	src/libubus2.c \
+	websocket/ubus_websocket.c
 
 INSTALL_PREFIX:=/usr
 
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
 CFLAGS+=-g -Isrc -Wall -Werror -std=gnu99
-LDFLAGS+=-lblobpack -lusys -lutype -ljson-c -ldl
+LDFLAGS+=-lblobpack -lusys -lutype -ljson-c -ldl -lwebsockets
 
-all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) cli-example socket-example client-example threads-example
+all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) cli-example socket-example client-example threads-example websocket-example
 
 #extras: 
 #	make -C lua 
@@ -49,6 +50,8 @@ socket-example: examples/socket.o $(OBJECTS)
 cli-example: examples/cli.o $(OBJECTS)
 	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/cli.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
 
+websocket-example: examples/websocket.o $(OBJECTS)
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/websocket.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)

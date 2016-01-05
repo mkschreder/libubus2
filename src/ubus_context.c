@@ -13,6 +13,8 @@
 
 #include <libutype/avl-cmp.h>
 #include "ubus_context.h"
+#include "ubus_socket.h"
+#include "ubus_rawsocket.h"
 #include "ubus_peer.h"
 
 struct ubus_peer *_find_peer_by_name(struct ubus_context *self, const char *client_name){
@@ -82,7 +84,7 @@ static void _on_resolve_method_call(struct ubus_request *req, struct blob_field 
 	// send reply with the same serial as the original request
 	//printf("sending response to %08x\n", req->src_id); 
 
-	ubus_socket_send(&self->socket, req->src_id, UBUS_MSG_METHOD_RETURN, req->seq, msg);  
+	ubus_socket_send(self->socket, req->src_id, UBUS_MSG_METHOD_RETURN, req->seq, msg);  
 }
 
 static void _on_reject_method_call(struct ubus_request *req, struct blob_field *msg){
@@ -93,7 +95,7 @@ static void _on_reject_method_call(struct ubus_request *req, struct blob_field *
 	
 	blob_reset(&self->buf); 
 	blob_put_attr(&self->buf, msg); 
-	ubus_socket_send(&self->socket, req->src_id, UBUS_MSG_ERROR, req->seq, blob_head(&self->buf));  
+	ubus_socket_send(self->socket, req->src_id, UBUS_MSG_ERROR, req->seq, blob_head(&self->buf));  
 }
 
 static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint16_t serial, struct blob_field *msg){
@@ -150,7 +152,7 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 	goto free; 
 reject: 
 	//ubus_request_reject(req, blob_head(&buf)); 
-	ubus_socket_send(&self->socket, peer->id, UBUS_MSG_ERROR, serial, blob_head(&buf));  
+	ubus_socket_send(self->socket, peer->id, UBUS_MSG_ERROR, serial, blob_head(&buf));  
 free: 
 	blob_free(&buf); 
 }
@@ -189,47 +191,51 @@ static void _on_msg_error(struct ubus_context *self, struct ubus_peer *peer, uin
 	ubus_request_delete(&req); 
 }
 
-static void _on_message_received(struct ubus_socket *socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
-	struct ubus_context *self = (struct ubus_context*)socket->user_data;  
-	assert(self); 
-	// find the peer 
-	struct ubus_peer *p = _find_peer_by_id(self, peer);  
-	if(!p) return; 
-	//printf("message %d from %08x\n", type, peer); 
-	//blob_field_dump_json(msg); 
-
-	switch(type){
-		case UBUS_MSG_METHOD_CALL: {
-			_on_msg_call(self, p, serial, msg); 
-			break; 
-		}
-		case UBUS_MSG_METHOD_RETURN: {		
-			_on_msg_return(self, p, serial, msg); 
-			break; 
-		}
-		case UBUS_MSG_SIGNAL: {
-			_on_msg_signal(self, p, serial, msg); 
-			break; 
-		}
-		case UBUS_MSG_ERROR: {
-			_on_msg_error(self, p, serial, msg); 
-			break; 
-		}
-	}
-}
-
-void _on_client_connected(struct ubus_socket *socket, uint32_t peer_id){
-	struct ubus_context *self = (struct ubus_context*)socket->user_data;  
+void _on_msg_client_connected(struct ubus_context *self, uint32_t peer_id){
 	_create_peer(self, peer_id); 
 	//printf("peer connected id %08x\n", peer_id); 	
 	// send out our name to peer
 	blob_reset(&self->buf); 
 	blob_put_string(&self->buf, "ubus.peer.well_known_name"); 
 	blob_put_string(&self->buf, self->name); 
-	ubus_socket_send(&self->socket, peer_id, UBUS_MSG_SIGNAL, self->request_seq++, blob_head(&self->buf)); 
+	ubus_socket_send(self->socket, peer_id, UBUS_MSG_SIGNAL, self->request_seq++, blob_head(&self->buf)); 
 }
 
-void ubus_context_init(struct ubus_context *self, const char *name){
+static void _on_message_received(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
+	struct ubus_context *self = (struct ubus_context*)ubus_socket_get_userdata(socket);  
+	assert(self); 
+
+	struct ubus_peer *p = _find_peer_by_id(self, peer);  
+
+	switch(type){
+		case UBUS_MSG_METHOD_CALL: {
+			if(!p) break; 
+			_on_msg_call(self, p, serial, msg); 
+			break; 
+		}
+		case UBUS_MSG_METHOD_RETURN: {		
+			if(!p) break; 
+			_on_msg_return(self, p, serial, msg); 
+			break; 
+		}
+		case UBUS_MSG_SIGNAL: {
+			if(!p) break; 
+			_on_msg_signal(self, p, serial, msg); 
+			break; 
+		}
+		case UBUS_MSG_ERROR: {
+			if(!p) break; 
+			_on_msg_error(self, p, serial, msg); 
+			break; 
+		}
+		case UBUS_MSG_PEER_CONNECTED: {
+			_on_msg_client_connected(self, peer); 
+			break; 
+		}
+	}
+}
+
+void ubus_context_init(struct ubus_context *self, const char *name, ubus_socket_t *socket){
 	INIT_LIST_HEAD(&self->requests); 
 	INIT_LIST_HEAD(&self->pending); 
 	INIT_LIST_HEAD(&self->pending_incoming); 
@@ -237,10 +243,11 @@ void ubus_context_init(struct ubus_context *self, const char *name){
 	avl_init(&self->peers_by_id, avl_intcmp, false, NULL); 
 	avl_init(&self->objects_by_name, avl_strcmp, false, NULL); 
 	avl_init(&self->objects_by_id, avl_intcmp, false, NULL); 
-	ubus_socket_init(&self->socket); 
-	ubus_socket_set_userdata(&self->socket, self); 
-	ubus_socket_on_message(&self->socket, &_on_message_received); 
-	ubus_socket_on_client_connected(&self->socket, &_on_client_connected); 
+	if(socket) { self->socket = *socket; *socket = NULL; }
+	else self->socket = ubus_rawsocket_new();  
+	ubus_socket_set_userdata(self->socket, self); 
+	ubus_socket_on_message(self->socket, &_on_message_received); 
+	//ubus_socket_on_client_connected(self->socket, &_on_client_connected); 
 	blob_init(&self->buf, 0, 0); 
 	self->name = strdup(name);
 	self->request_seq = 1; 
@@ -276,14 +283,14 @@ void ubus_context_destroy(struct ubus_context *self){
 	}
 	// objects_by_id does not need to be freed!
 
-	ubus_socket_destroy(&self->socket); 
+	ubus_socket_delete(self->socket); 
 	blob_free(&self->buf); 
 	free(self->name); 
 }
 
-struct ubus_context *ubus_new(const char *name){
+struct ubus_context *ubus_new(const char *name, ubus_socket_t *socket){
 	struct ubus_context *self = calloc(1, sizeof(*self)); 
-	ubus_context_init(self, name); 
+	ubus_context_init(self, name, socket); 
 	return self; 
 }
 
@@ -296,11 +303,11 @@ void ubus_delete(struct ubus_context **self){
 
 int ubus_connect(struct ubus_context *self, const char *path, uint32_t *peer_id){
 	if(!path) path = UBUS_DEFAULT_SOCKET; 
-	return ubus_socket_connect(&self->socket, path, peer_id); 
+	return ubus_socket_connect(self->socket, path, peer_id); 
 }
 
 int ubus_listen(struct ubus_context *self, const char *path){
-	return ubus_socket_listen(&self->socket, path); 	
+	return ubus_socket_listen(self->socket, path); 	
 }
 
 int ubus_set_peer_localname(struct ubus_context *self, uint32_t peer_id, const char *localname){
@@ -335,7 +342,7 @@ static void _ubus_send_pending(struct ubus_context *self){
 		blob_put_string(&self->buf, req->object); 
 		blob_put_string(&self->buf, req->method); 
 		blob_put_attr(&self->buf, blob_head(&req->buf)); 
-		ubus_socket_send(&self->socket, peer->id, UBUS_MSG_METHOD_CALL, req->seq, blob_head(&self->buf)); 
+		ubus_socket_send(self->socket, peer->id, UBUS_MSG_METHOD_CALL, req->seq, blob_head(&self->buf)); 
 
 		// move the request to pending queue
 		list_del_init(&req->list); 
@@ -397,7 +404,7 @@ int ubus_handle_events(struct ubus_context *self){
 	_ubus_send_pending(self); 
 
 	// poll for incoming events
-	ubus_socket_poll(&self->socket, 0); 
+	ubus_socket_handle_events(self->socket, 0); 
 	return 0; 
 }
 

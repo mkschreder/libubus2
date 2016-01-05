@@ -1,69 +1,34 @@
-/*
- * Copyright (C) 2015 Martin Schröder <mkschreder.uk@gmail.com>
- * 
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
-
 #pragma once
 
-#include "ubus_message.h"
+#include <inttypes.h>
 
-#include <libutype/list.h>
-#include <libusys/uloop.h>
+struct ubus_socket_api; 
+typedef const struct ubus_socket_api** ubus_socket_t; 
+struct blob_field; 
 
-#include "ubus_id.h"
+typedef void (*ubus_socket_msg_cb_t)(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg);  
+//typedef void (*ubus_socket_client_cb_t)(struct ubus_rawsocket *self, uint32_t peer);  
 
-#define UBUS_PEER_BROADCAST (-1)
-
-struct ubus_context; 
-struct ubus_request; 
-
-struct ubus_socket; 
-
-typedef void (*ubus_socket_data_cb_t)(struct ubus_socket *self, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg);  
-typedef void (*ubus_socket_client_cb_t)(struct ubus_socket *self, uint32_t peer);  
-
-struct ubus_socket {
-	struct avl_tree clients; 
-
-	int listen_fd;
-
-	ubus_socket_data_cb_t on_message; 
-	ubus_socket_client_cb_t on_client_connected; 
-
-	void *user_data; 
+struct ubus_socket_api {
+	void 	(*poll)(ubus_socket_t ptr, int timeout); 
+	void 	(*destroy)(ubus_socket_t ptr); 
+	int 	(*listen)(ubus_socket_t ptr, const char *path); 
+	int 	(*connect)(ubus_socket_t ptr, const char *path, uint32_t *id);
+	int 	(*send)(ubus_socket_t ptr, int32_t peer, int type, uint16_t serial, struct blob_field *msg); 
+	int 	(*handle_events)(ubus_socket_t ptr, int timeout); 
+	void 	(*on_message)(ubus_socket_t ptr, ubus_socket_msg_cb_t cb); 		
+	void*	(*userdata)(ubus_socket_t ptr, void *data); 
 }; 
 
-
-struct ubus_socket *ubus_socket_new(void); 
-void ubus_socket_delete(struct ubus_socket **self); 
-
-void ubus_socket_init(struct ubus_socket *self); 
-void ubus_socket_destroy(struct ubus_socket *self); 
-
-int ubus_socket_listen(struct ubus_socket *self, const char *path); 
-int ubus_socket_connect(struct ubus_socket *self, const char *path, uint32_t *id);
-
 #define UBUS_TARGET_PEER (0)
+#define UBUS_BROADCAST_PEER (-1)
 
-int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t serial, struct blob_field *msg); 
-static inline void ubus_socket_on_message(struct ubus_socket *self, ubus_socket_data_cb_t cb){
-	self->on_message = cb; 
-}
-static inline void ubus_socket_on_client_connected(struct ubus_socket *self, ubus_socket_client_cb_t cb){
-	self->on_client_connected = cb; 
-}
-
-void  ubus_socket_poll(struct ubus_socket *self, int timeout); 
-
-static inline void ubus_socket_set_userdata(struct ubus_socket *self, void *ptr){
-	self->user_data = ptr; 
-}
-
+#define ubus_socket_delete(sock) {(*sock)->destroy(sock); sock = NULL;} 
+#define ubus_socket_listen(sock, path) (*sock)->listen(sock, path)
+#define ubus_socket_connect(sock, path, clidptr) (*sock)->connect(sock, path, clidptr) 
+#define ubus_socket_send(sock, peer, type, serial, msg) (*sock)->send(sock, peer, type, serial, msg)
+#define ubus_socket_on_message(sock, cb) (*sock)->on_message(sock, cb)
+#define ubus_socket_handle_events(sock, timeout) (*sock)->handle_events(sock, timeout)
+#define ubus_socket_sockopt(sock, opt, ptr) (*sock)->sockopt(sock, opt, ptr)
+#define ubus_socket_get_userdata(sock) (*sock)->userdata(sock, NULL)
+#define ubus_socket_set_userdata(sock, ptr) (*sock)->userdata(sock, ptr)

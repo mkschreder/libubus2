@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 	if (argc < 1)
 		return usage(progname);
 
-	struct ubus_context *ctx = ubus_new("ubus-cli"); 
+	struct ubus_context *ctx = ubus_new("ubus-cli", NULL); 
 	uint32_t id = 0; 
 	if(ubus_connect(ctx, ubus_socket, &id) < 0){
 		if (!simple_output)

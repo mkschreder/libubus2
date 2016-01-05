@@ -23,7 +23,7 @@ static int test_method(struct ubus_method *self, struct ubus_context *ctx, struc
 }
 
 void* client_thread(void *args){
-	struct ubus_context *ctx = ubus_new("client"); 
+	struct ubus_context *ctx = ubus_new("client", NULL); 
 		
 	if(ubus_connect(ctx, "test.sock", NULL) < 0){
 		printf("Error connecting to ubus socket!\n"); 

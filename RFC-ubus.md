@@ -227,13 +227,14 @@ and forward it back to the original caller.
 
 The bus controller itself is implemented as an object: 
 
-/ubus/objects 
-	
-	ubus.objects.publish: takes an object descriptor and publishes a proxy
-	objects locally 
-	
-	ubus.objects.list: lists all currently published objects in
+/ubus/peer 
+
+	ubus.peer.list: lists all currently published objects in
 	the directory.  
+
+/ubus/server
+	ubus.server.publish: takes an object descriptor and publishes a proxy
+	objects locally on the server. 
 
 Built In Signals 
 ----------------

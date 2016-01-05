@@ -19,7 +19,7 @@ static int _on_ubus_client_list(struct ubus_method *method, struct ubus_context 
 
 struct ubus_client *ubus_client_new(const char *name){
 	struct ubus_client *self = calloc(1, sizeof(struct ubus_client)); 
-	self->ctx = ubus_new(name); 
+	self->ctx = ubus_new(name, NULL); 
 
 	struct ubus_object *obj = ubus_object_new("/ubus/peer"); 
 	struct ubus_method *method = ubus_method_new("ubus.peer.list", _on_ubus_client_list); 

@@ -30,10 +30,23 @@
 #include <blobpack/blobpack.h>
 
 #include "ubus_socket.h"
+#include "ubus_rawsocket.h"
 
 #define STATIC_IOV(_var) { .iov_base = (char *) &(_var), .iov_len = sizeof(_var) }
 
 #define UBUS_MSGBUF_REDUCTION_INTERVAL	16
+
+struct ubus_rawsocket {
+	struct avl_tree clients; 
+
+	int listen_fd;
+
+	ubus_socket_msg_cb_t on_message; 
+
+	void *user_data; 
+
+	const struct ubus_socket_api *api; 
+}; 
 
 struct ubus_msg_header {
 	uint8_t hdr_size; 	// works as a magic. Must always be sizeof(struct ubus_msg_header)
@@ -111,24 +124,8 @@ void ubus_frame_delete(struct ubus_frame **self){
 	*self = NULL; 
 }
 
-struct ubus_socket *ubus_socket_new(void){
-	struct ubus_socket *self = calloc(1, sizeof(struct ubus_socket)); 
-	ubus_socket_init(self); 
-	return self; 
-}
-
-void ubus_socket_delete(struct ubus_socket **self){
-	ubus_socket_destroy(*self); 
-	free(*self); 
-	*self = NULL; 
-}
-
-void ubus_socket_init(struct ubus_socket *self){
-	//INIT_LIST_HEAD(&self->clients); 
-	ubus_id_tree_init(&self->clients); 
-}
-
-void ubus_socket_destroy(struct ubus_socket *self){
+void _rawsocket_destroy(ubus_socket_t socket){
+	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
 	struct ubus_id *id, *tmp; 
 	avl_for_each_element_safe(&self->clients, id, avl, tmp){
 		struct ubus_client *client = container_of(id, struct ubus_client, id);  
@@ -136,9 +133,10 @@ void ubus_socket_destroy(struct ubus_socket *self){
 		ubus_client_delete(&client); 
 	}
 	if(self->listen_fd) close(self->listen_fd);
+	free(self); 
 }
 
-static void _accept_connection(struct ubus_socket *self){
+static void _accept_connection(struct ubus_rawsocket *self){
 	bool done = false; 
 
 	do {
@@ -159,8 +157,8 @@ static void _accept_connection(struct ubus_socket *self){
 		struct ubus_client *cl = ubus_client_new(client); 
 		ubus_id_alloc(&self->clients, &cl->id, 0); 
 		
-		if(self->on_client_connected){
-			self->on_client_connected(self, cl->id.id); 
+		if(self->on_message){
+			self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
 		}
 	} while (!done);
 }
@@ -175,7 +173,8 @@ static void _split_address_port(char *address, int addrlen, char **port){
 	}
 }
 
-int ubus_socket_listen(struct ubus_socket *self, const char *_address){
+static int _rawsocket_listen(ubus_socket_t socket, const char *_address){
+	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
 	assert(_address);
 	int addrlen = strlen(_address); 
 	char *address = alloca(addrlen); 
@@ -198,7 +197,8 @@ int ubus_socket_listen(struct ubus_socket *self, const char *_address){
 	return 0; 
 }
 
-int ubus_socket_connect(struct ubus_socket *self, const char *_address, uint32_t *id){
+static int _rawsocket_connect(ubus_socket_t socket, const char *_address, uint32_t *id){
+	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
 	int flags = 0; 
 	int addrlen = strlen(_address); 
 	char *address = alloca(addrlen); 
@@ -216,8 +216,8 @@ int ubus_socket_connect(struct ubus_socket *self, const char *_address, uint32_t
 	ubus_id_alloc(&self->clients, &cl->id, 0); 
 	
 	// connecting out generates the same event as connecting in
-	if(self->on_client_connected){
-		self->on_client_connected(self, cl->id.id); 
+	if(self->on_message){
+		self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
 	}
 
 	if(id) *id = cl->id.id; 
@@ -225,7 +225,7 @@ int ubus_socket_connect(struct ubus_socket *self, const char *_address, uint32_t
 	return 0; 
 }
 
-void _ubus_client_recv(struct ubus_client *self, struct ubus_socket *socket){
+void _ubus_client_recv(struct ubus_client *self, struct ubus_rawsocket *socket){
 	// if we still have not received the header
 	if(self->recv_count < sizeof(struct ubus_msg_header)){
 		int rc = recv(self->fd, ((char*)&self->hdr) + self->recv_count, sizeof(struct ubus_msg_header) - self->recv_count, 0); 
@@ -265,7 +265,7 @@ void _ubus_client_recv(struct ubus_client *self, struct ubus_socket *socket){
 				return;  
 			} else {
 				if(socket->on_message){
-					socket->on_message(socket, self->id.id, self->hdr.type, self->hdr.seq, msg); 
+					socket->on_message(&socket->api, self->id.id, self->hdr.type, self->hdr.seq, msg); 
 				}
 			}
 			self->recv_count = 0; 
@@ -304,7 +304,8 @@ void _ubus_client_send(struct ubus_client *self){
 	}
 }
 
-void ubus_socket_poll(struct ubus_socket *self, int timeout){
+static int _rawsocket_handle_events(ubus_socket_t socket, int timeout){
+	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
 	int count = avl_size(&self->clients) + 1; 
 	struct pollfd *pfd = alloca(sizeof(struct pollfd) * count); 
 	memset(pfd, 0, sizeof(struct pollfd) * count); 
@@ -349,9 +350,11 @@ void ubus_socket_poll(struct ubus_socket *self, int timeout){
 			}
 		}
 	}
+	return 0; 
 }
 
-int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t serial, struct blob_field *msg){
+static int _rawsocket_send(ubus_socket_t socket, int32_t peer, int type, uint16_t serial, struct blob_field *msg){
+	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
 	struct ubus_id *id;  
 	if(peer == UBUS_PEER_BROADCAST){
 		avl_for_each_element(&self->clients, id, avl){
@@ -373,3 +376,31 @@ int ubus_socket_send(struct ubus_socket *self, int32_t peer, int type, uint16_t 
 	return 0; 	
 }
 
+static void _rawsocket_on_message(ubus_socket_t socket, ubus_socket_msg_cb_t cb){
+	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
+	self->on_message = cb; 
+}
+
+static void *_rawsocket_userdata(ubus_socket_t socket, void *ptr){
+	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
+	if(!ptr) return self->user_data; 
+	self->user_data = ptr; 
+	return ptr; 
+}
+
+ubus_socket_t ubus_rawsocket_new(void){
+	struct ubus_rawsocket *self = calloc(1, sizeof(struct ubus_rawsocket)); 
+	ubus_id_tree_init(&self->clients); 
+	// virtual api 
+	static const struct ubus_socket_api api = {
+		.destroy = _rawsocket_destroy, 
+		.listen = _rawsocket_listen, 
+		.connect = _rawsocket_connect, 
+		.send = _rawsocket_send, 
+		.handle_events = _rawsocket_handle_events, 
+		.on_message = _rawsocket_on_message, 
+		.userdata = _rawsocket_userdata
+	}; 
+	self->api = &api; 
+	return &self->api; 
+}

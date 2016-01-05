@@ -46,7 +46,7 @@ void _on_request_failed(struct ubus_request *req, struct blob_field *res){
 }
 
 void *_server_thread(void *arg){
-	struct ubus_server *server = ubus_server_new("ubus"); 
+	struct ubus_server *server = ubus_server_new("ubus", NULL); 
 
 	if(ubus_server_listen(server, "./ubus.sock") < 0){
 		fprintf(stderr, "server could not listen on specified socket!\n"); 
@@ -62,7 +62,7 @@ void *_server_thread(void *arg){
 }
 
 void *_client_thread(void *arg){
-	struct ubus_context *client = ubus_new("client"); 
+	struct ubus_context *client = ubus_new("client", NULL); 
 
 	if(ubus_connect(client, "./ubus.sock", NULL) < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
@@ -126,7 +126,7 @@ int main(int argc, char **argv){
 	usleep(2000000); 
 
 	pthread_create(&client, NULL, _client_thread, NULL); 
-	struct ubus_context *user = ubus_new("user"); 
+	struct ubus_context *user = ubus_new("user", NULL); 
 
 	struct blob buf; 
 	blob_init(&buf, 0, 0); 

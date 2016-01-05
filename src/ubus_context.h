@@ -23,6 +23,7 @@
 #include "ubus_method.h"
 #include "ubus_object.h"
 #include "ubus_socket.h"
+#include "ubus_rawsocket.h"
 #include "ubus_context.h"
 
 #define UBUS_DEFAULT_SOCKET "/var/run/ubus.sock"
@@ -38,7 +39,7 @@ struct ubus_context {
 	struct list_head pending; 
 	struct list_head pending_incoming; 
 
-	struct ubus_socket socket; 
+	ubus_socket_t socket; 
 
 	uint16_t request_seq;
 
@@ -49,7 +50,7 @@ struct ubus_context {
 	void *user_data; 
 };
 
-struct ubus_context *ubus_new(const char *name);
+struct ubus_context *ubus_new(const char *name, ubus_socket_t *socket);
 void ubus_delete(struct ubus_context **self); 
 int ubus_connect(struct ubus_context *self, const char *path, uint32_t *peer_id); 
 int ubus_set_peer_localname(struct ubus_context *self, uint32_t peer, const char *localname); 

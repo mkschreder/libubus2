@@ -102,10 +102,10 @@ static int _on_publish_object(struct ubus_method *m, struct ubus_context *ctx, s
 	return 0; 
 }
 
-struct ubus_server *ubus_server_new(const char *name){
+struct ubus_server *ubus_server_new(const char *name, ubus_socket_t *socket){
 	struct ubus_server *self = calloc(1, sizeof(struct ubus_server)); 
 	
-	self->ctx = ubus_new(name); 
+	self->ctx = ubus_new(name, socket); 
 	INIT_LIST_HEAD(&self->objects); 
 
 	struct ubus_object *obj = ubus_object_new("/ubus/server"); 
