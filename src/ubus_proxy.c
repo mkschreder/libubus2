@@ -17,6 +17,11 @@ struct ubus_proxy_peer *ubus_proxy_peer_new(uint32_t inpeer, uint32_t outpeer){
 	return self; 
 }
 
+void ubus_proxy_peer_delete(struct ubus_proxy_peer **self){
+	free(*self); 
+	*self = NULL; 
+}
+
 struct ubus_proxy *ubus_proxy_new(void){
 	struct ubus_proxy *self = calloc(1, sizeof(struct ubus_proxy)); 
 	ubus_id_tree_init(&self->clients_in); 
@@ -25,7 +30,14 @@ struct ubus_proxy *ubus_proxy_new(void){
 }
 
 void ubus_proxy_delete(struct ubus_proxy **self){
-
+	if((*self)->outpath) free((*self)->outpath); 
+	struct ubus_id *id = 0, *ptr; 
+	avl_for_each_element_safe(&(*self)->clients_in, id, avl, ptr){
+		struct ubus_proxy_peer *peer = container_of(id, struct ubus_proxy_peer, id_in); 
+		ubus_proxy_peer_delete(&peer); 
+	}
+	free(*self); 
+	*self = NULL; 
 }
 
 static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
@@ -40,6 +52,19 @@ static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, uint8_t
 			ubus_id_alloc(&self->clients_in, &p->id_in, peer); 
 			ubus_id_alloc(&self->clients_out, &p->id_out, outpeer); 
 			//printf("proxy: set up connection between %08x and %08x\n", peer, outpeer); 
+			break; 
+		}
+		case UBUS_MSG_PEER_DISCONNECTED: {
+			// remove the client binding and close connection to the main server as well
+			struct ubus_id *id = ubus_id_find(&self->clients_in, peer); 
+			if(id){
+				printf("proxy: peer disconnect!\n"); 
+				struct ubus_proxy_peer *p = container_of(id, struct ubus_proxy_peer, id_in); 
+				ubus_socket_disconnect(self->outsock, p->id_out.id); 
+				ubus_id_free(&self->clients_out, &p->id_out); 
+				ubus_id_free(&self->clients_in, &p->id_in); 
+				ubus_proxy_peer_delete(&p); 
+			}
 			break; 
 		}
 		default: {

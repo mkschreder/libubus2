@@ -33,9 +33,9 @@ enum ubus_msg_type {
 	// asynchronous signal message
 	UBUS_MSG_SIGNAL,
 
-	/** APPLICATION MESSAGES **/
+	/** APPLICATION MESSAGES (ONLY for use by library to signal callback. Never over network!) **/
 	UBUS_MSG_PEER_CONNECTED,
-
+	UBUS_MSG_PEER_DISCONNECTED, 
 	__UBUS_MSG_LAST
 }; 
 

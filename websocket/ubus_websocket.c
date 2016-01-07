@@ -21,6 +21,7 @@ struct ubus_websocket {
 struct ubus_websocket_client {
 	struct ubus_id id; 
 	struct list_head tx_queue; 
+	bool disconnect;
 }; 
 
 struct ubus_websocket_frame {
@@ -59,6 +60,10 @@ static struct ubus_websocket_client *ubus_websocket_client_new(void){
 
 static __attribute__((unused)) void ubus_websocket_client_delete(struct ubus_websocket_client **self){
 	// TODO: free tx_queue
+	struct ubus_websocket_frame *pos, *tmp; 
+	list_for_each_entry_safe(pos, tmp, &(*self)->tx_queue, list){
+		ubus_websocket_frame_delete(&pos);  
+	}	
 	free(*self); 
 	*self = NULL;
 }
@@ -80,6 +85,8 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 	const struct lws_protocols *proto = lws_get_protocol(wsi); 
 
 	struct ubus_websocket_client **user = (struct ubus_websocket_client **)_user; 
+	
+	if(user && *user && (*user)->disconnect) return -1; 
 
 	int32_t peer_id = lws_get_socket_fd(wsi); 
 	switch(reason){
@@ -92,15 +99,23 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 			lws_get_peer_addresses(wsi, peer_id, hostname, sizeof(hostname), ipaddr, sizeof(ipaddr)); 
 			printf("connection established! %s %s %d %08x\n", hostname, ipaddr, peer_id, client->id.id); 
 			if(self->on_message) self->on_message(&self->api, (*user)->id.id, UBUS_MSG_PEER_CONNECTED, 0, NULL); 
+			lws_callback_on_writable(wsi); 	
 			break; 
 		}
+		case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+			printf("client error\n"); 
+			break; 
 		case LWS_CALLBACK_CLOSED: {
-			printf("client disconnected\n"); 
-			ubus_websocket_client_delete(user); 
+			printf("client disconnected %p\n", _user); 
+			struct ubus_websocket *self = (struct ubus_websocket*)proto->user; 
+			if(self->on_message) self->on_message(&self->api, (*user)->id.id, UBUS_MSG_PEER_DISCONNECTED, 0, NULL); 
+			ubus_id_free(&self->clients, &(*user)->id); 
+			ubus_websocket_client_delete(user); 	
 			break; 
 		}
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
 			if(list_empty(&(*user)->tx_queue)){
+				lws_callback_on_writable(wsi); 	
 				break; 
 			}
 			// TODO: handle partial writes correctly 
@@ -113,7 +128,8 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 				list_del_init(&frame->list); 
 				ubus_websocket_frame_delete(&frame); 
 			}
-			lws_rx_flow_control(wsi, 1); 
+			lws_callback_on_writable(wsi); 	
+			//lws_rx_flow_control(wsi, 1); 
 			break; 
 		}
 		case LWS_CALLBACK_RECEIVE: {
@@ -145,15 +161,14 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 					else if(id && error) self->on_message(&self->api, (*user)->id.id, UBUS_MSG_ERROR, id, error); 
 				}
 			}
-			lws_rx_flow_control(wsi, 0); 
+			//lws_rx_flow_control(wsi, 0); 
 			lws_callback_on_writable(wsi); 	
 			break; 
 		}
-		case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-			printf("client error\n"); 
-			break; 
+		
 		case LWS_CALLBACK_CLIENT_ESTABLISHED:
 			printf("Client connected!\n"); 
+			// TODO: implement once we support outgoing websocket connections
 			break;
 		default: 
 			break; 
@@ -169,6 +184,18 @@ void _websocket_destroy(ubus_socket_t socket){
 	if(self->ctx) lws_context_destroy(self->ctx); 
 	free(self->protocols); 
 	free(self);  
+}
+
+int _websocket_disconnect(ubus_socket_t socket, uint32_t client_id){
+	struct ubus_websocket *self = container_of(socket, struct ubus_websocket, api); 
+	struct ubus_id *id = ubus_id_find(&self->clients, client_id); 
+	if(!id) return -1; 
+	//ubus_id_free(&self->clients, id); 
+	// only mark connection as disconnected and let the disconnect happen in websocket library callback. 
+	struct ubus_websocket_client *p = container_of(id, struct ubus_websocket_client, id); 
+	p->disconnect = true; 
+	//ubus_websocket_client_delete(&p); 
+	return 0; 
 }
 
 int _websocket_listen(ubus_socket_t socket, const char *path){
@@ -212,7 +239,7 @@ static int _websocket_send(ubus_socket_t socket, int32_t peer, int type, uint16_
 	
 	struct ubus_websocket_client *client = (struct ubus_websocket_client*)container_of(id, struct ubus_websocket_client, id);  
 	printf("websocket send: "); 
-	blob_field_dump_json(msg); 
+	if(msg) blob_field_dump_json(msg); 
 	blob_reset(&self->buf); 
 	blob_offset_t ofs = blob_open_table(&self->buf); 
 	blob_put_string(&self->buf, "jsonrpc"); 
@@ -262,6 +289,7 @@ ubus_socket_t ubus_websocket_new(void){
 		.destroy = _websocket_destroy, 
 		.listen = _websocket_listen, 
 		.connect = _websocket_connect, 
+		.disconnect = _websocket_disconnect, 
 		.send = _websocket_send, 
 		.handle_events = _websocket_handle_events, 
 		.on_message = _websocket_on_message, 

@@ -20,7 +20,7 @@ INSTALL_PREFIX:=/usr
 
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
-CFLAGS+=-g -Isrc -Wall -Werror -std=gnu99
+CFLAGS+=-g -Isrc -Wall -Werror -std=gnu99 -Wmissing-field-initializers
 LDFLAGS+=-lblobpack -lusys -lutype -ljson-c -ldl -lwebsockets
 
 all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) cli-example socket-example client-example threads-example websocket-example

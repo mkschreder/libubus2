@@ -14,6 +14,7 @@ struct ubus_socket_api {
 	void 	(*destroy)(ubus_socket_t ptr); 
 	int 	(*listen)(ubus_socket_t ptr, const char *path); 
 	int 	(*connect)(ubus_socket_t ptr, const char *path, uint32_t *id);
+	int 	(*disconnect)(ubus_socket_t ptr, uint32_t id); 
 	int 	(*send)(ubus_socket_t ptr, int32_t peer, int type, uint16_t serial, struct blob_field *msg); 
 	int 	(*handle_events)(ubus_socket_t ptr, int timeout); 
 	void 	(*on_message)(ubus_socket_t ptr, ubus_socket_msg_cb_t cb); 		
@@ -26,6 +27,7 @@ struct ubus_socket_api {
 #define ubus_socket_delete(sock) {(*sock)->destroy(sock); sock = NULL;} 
 #define ubus_socket_listen(sock, path) (*sock)->listen(sock, path)
 #define ubus_socket_connect(sock, path, clidptr) (*sock)->connect(sock, path, clidptr) 
+#define ubus_socket_disconnect(sock, clid) (*sock)->disconnect(sock, clid) 
 #define ubus_socket_send(sock, peer, type, serial, msg) (*sock)->send(sock, peer, type, serial, msg)
 #define ubus_socket_on_message(sock, cb) (*sock)->on_message(sock, cb)
 #define ubus_socket_handle_events(sock, timeout) (*sock)->handle_events(sock, timeout)

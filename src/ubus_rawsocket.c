@@ -64,7 +64,7 @@ struct ubus_frame {
 	int send_count; 
 }; 
 
-struct ubus_client {
+struct ubus_rawsocket_client {
 	struct ubus_id id; 
 	struct list_head tx_queue; 
 	int fd; 
@@ -72,7 +72,8 @@ struct ubus_client {
 	int recv_count; 
 	struct ubus_msg_header hdr; 
 	struct blob data; 
-	//struct list_head rx_queue;
+
+	bool disconnected; 
 }; 
 
 uint16_t _crc16(char* data_p, uint32_t length){
@@ -87,8 +88,8 @@ uint16_t _crc16(char* data_p, uint32_t length){
     return crc;
 }
 
-static struct ubus_client *ubus_client_new(int fd){
-	struct ubus_client *self = calloc(1, sizeof(struct ubus_client)); 
+static struct ubus_rawsocket_client *ubus_rawsocket_client_new(int fd){
+	struct ubus_rawsocket_client *self = calloc(1, sizeof(struct ubus_rawsocket_client)); 
 	INIT_LIST_HEAD(&self->tx_queue); 
 	self->fd = fd; 
 	self->recv_count = 0; 
@@ -96,7 +97,7 @@ static struct ubus_client *ubus_client_new(int fd){
 	return self; 
 }
 
-static void ubus_client_delete(struct ubus_client **self){
+static void ubus_rawsocket_client_delete(struct ubus_rawsocket_client **self){
 	shutdown((*self)->fd, SHUT_RDWR); 
 	close((*self)->fd); 
 	blob_free(&(*self)->data); 
@@ -124,13 +125,21 @@ void ubus_frame_delete(struct ubus_frame **self){
 	*self = NULL; 
 }
 
+static int _rawsocket_remove_client(struct ubus_rawsocket *self, struct ubus_rawsocket_client **client){
+	printf("rawsocket: remove client %08x\n", (*client)->id.id); 
+	ubus_id_free(&self->clients, &(*client)->id); 
+	if(self->on_message) self->on_message(&self->api, (*client)->id.id, UBUS_MSG_PEER_DISCONNECTED, 0, 0); 
+	ubus_rawsocket_client_delete(client); 
+	return 0; 
+}
+
 void _rawsocket_destroy(ubus_socket_t socket){
 	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
 	struct ubus_id *id, *tmp; 
 	avl_for_each_element_safe(&self->clients, id, avl, tmp){
-		struct ubus_client *client = container_of(id, struct ubus_client, id);  
+		struct ubus_rawsocket_client *client = container_of(id, struct ubus_rawsocket_client, id);  
 		ubus_id_free(&self->clients, &client->id); 
-		ubus_client_delete(&client); 
+		ubus_rawsocket_client_delete(&client); 
 	}
 	if(self->listen_fd) close(self->listen_fd);
 	free(self); 
@@ -154,7 +163,7 @@ static void _accept_connection(struct ubus_rawsocket *self){
 		// configure client into non blocking mode
 		fcntl(client, F_SETFL, fcntl(client, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
 
-		struct ubus_client *cl = ubus_client_new(client); 
+		struct ubus_rawsocket_client *cl = ubus_rawsocket_client_new(client); 
 		ubus_id_alloc(&self->clients, &cl->id, 0); 
 		
 		if(self->on_message){
@@ -212,7 +221,7 @@ static int _rawsocket_connect(ubus_socket_t socket, const char *_address, uint32
 
 	fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
 
-	struct ubus_client *cl = ubus_client_new(fd); 
+	struct ubus_rawsocket_client *cl = ubus_rawsocket_client_new(fd); 
 	ubus_id_alloc(&self->clients, &cl->id, 0); 
 	
 	// connecting out generates the same event as connecting in
@@ -225,13 +234,29 @@ static int _rawsocket_connect(ubus_socket_t socket, const char *_address, uint32
 	return 0; 
 }
 
-void _ubus_client_recv(struct ubus_client *self, struct ubus_rawsocket *socket){
+static int _rawsocket_disconnect(ubus_socket_t socket, uint32_t client_id){
+	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
+	struct ubus_id *id = ubus_id_find(&self->clients, client_id); 
+	if(!id) {
+		return -1; 
+	}
+	struct ubus_rawsocket_client *client = container_of(id, struct ubus_rawsocket_client, id); 
+	return _rawsocket_remove_client(self, &client); 
+}
+
+void _ubus_rawsocket_client_recv(struct ubus_rawsocket_client *self, struct ubus_rawsocket *socket){
 	// if we still have not received the header
+	if(self->disconnected) return; 
+
 	if(self->recv_count < sizeof(struct ubus_msg_header)){
 		int rc = recv(self->fd, ((char*)&self->hdr) + self->recv_count, sizeof(struct ubus_msg_header) - self->recv_count, 0); 
 		if(rc > 0){
 			self->recv_count += rc; 
-		} 
+		} else if(rc == 0){
+			printf("recv disconnected!\n"); 
+			self->disconnected = true; 
+			return; 
+		}
 	}
 	// if we have just received the header then we allocate the body based on size in the header
 	if(self->recv_count == sizeof(struct ubus_msg_header)){
@@ -254,6 +279,11 @@ void _ubus_client_recv(struct ubus_client *self, struct ubus_rawsocket *socket){
 		while((rc = recv(self->fd, (char*)(blob_head(&self->data)) + cursor, self->hdr.data_size - cursor, 0)) > 0){
 			self->recv_count += rc; 
 			cursor = self->recv_count - sizeof(struct ubus_msg_header);
+			if(cursor == self->hdr.data_size) break; 
+		}
+		if(rc == 0){
+			self->disconnected = true; 
+			return; 
 		}
 		// if we have received the full message then we call the message callback
 		if(self->recv_count == (sizeof(struct ubus_msg_header) + self->hdr.data_size)){
@@ -273,7 +303,7 @@ void _ubus_client_recv(struct ubus_client *self, struct ubus_rawsocket *socket){
 	}
 }
 
-void _ubus_client_send(struct ubus_client *self){
+void _ubus_rawsocket_client_send(struct ubus_rawsocket_client *self){
 	if(list_empty(&self->tx_queue)){
 		return; 
 	}
@@ -284,7 +314,10 @@ void _ubus_client_send(struct ubus_client *self){
 		if(sc > 0){
 			req->send_count += sc; 
 		}
-		// TODO: handle disconnect
+		if(sc == 0) {
+			self->disconnected = true; 
+			return; 
+		}
 	}
 	if(req->send_count >= sizeof(struct ubus_msg_header)){
 		int cursor = req->send_count - sizeof(struct ubus_msg_header); 
@@ -293,8 +326,13 @@ void _ubus_client_send(struct ubus_client *self){
 		while((sc = send(self->fd, blob_head(&req->data) + cursor, buf_size - cursor, MSG_NOSIGNAL)) > 0){
 			req->send_count += sc; 
 			cursor = req->send_count - sizeof(struct ubus_msg_header);
+			if(cursor == buf_size) break; 
 		}
-		// TODO: handle disconnect
+		if(sc == 0) {
+			self->disconnected = true; 
+			return; 
+		}
+
 		if(req->send_count == (sizeof(struct ubus_msg_header) + buf_size)){
 			// full buffer was transmitted so we destroy the request
 			list_del_init(&req->list); 
@@ -309,14 +347,14 @@ static int _rawsocket_handle_events(ubus_socket_t socket, int timeout){
 	int count = avl_size(&self->clients) + 1; 
 	struct pollfd *pfd = alloca(sizeof(struct pollfd) * count); 
 	memset(pfd, 0, sizeof(struct pollfd) * count); 
-	struct ubus_client **clients = alloca(sizeof(void*)*100); 
+	struct ubus_rawsocket_client **clients = alloca(sizeof(void*)*100); 
 	pfd[0] = (struct pollfd){ .fd = self->listen_fd, .events = POLLIN | POLLERR }; 
 	clients[0] = 0; 
 
 	int c = 1; 
-	struct ubus_id *id;  
+	struct ubus_id *id, *tmp;  
 	avl_for_each_element(&self->clients, id, avl){
-		struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
+		struct ubus_rawsocket_client *client = (struct ubus_rawsocket_client*)container_of(id, struct ubus_rawsocket_client, id);  
 		pfd[c] = (struct pollfd){ .fd = client->fd, .events = POLLOUT | POLLIN | POLLERR };  
 		clients[c] = client;  
 		c++; 
@@ -324,7 +362,7 @@ static int _rawsocket_handle_events(ubus_socket_t socket, int timeout){
 	
 	// try to send more data
 	for(int c = 1; c < count; c++){
-		_ubus_client_send(clients[c]); 
+		_ubus_rawsocket_client_send(clients[c]); 
 	}
 
 	int ret = 0; 
@@ -337,19 +375,29 @@ static int _rawsocket_handle_events(ubus_socket_t socket, int timeout){
 			if(pfd[c].revents != 0){
 				if(pfd[c].revents & POLLHUP || pfd[c].revents & POLLRDHUP){
 					//printf("ERROR: peer hung up!\n"); 
-					_ubus_client_recv(clients[c], self); 
+					_ubus_rawsocket_client_recv(clients[c], self); 
 					avl_delete(&self->clients, &clients[c]->id.avl); 
-					ubus_client_delete(&clients[c]); 
+					ubus_rawsocket_client_delete(&clients[c]); 
 					continue; 
 				} else if(pfd[c].revents & POLLERR){
 					printf("ERROR: socket error!\n"); 
 				} else if(pfd[c].revents & POLLIN) {
 					// receive as much data as we can
-					_ubus_client_recv(clients[c], self); 
+					_ubus_rawsocket_client_recv(clients[c], self); 
 				}
 			}
 		}
 	}
+
+	// remove any disconnected clients
+	avl_for_each_element_safe(&self->clients, id, avl, tmp){
+		struct ubus_rawsocket_client *client = (struct ubus_rawsocket_client*)container_of(id, struct ubus_rawsocket_client, id);  
+		if(client->disconnected) {
+			_rawsocket_remove_client(self, &client); 
+			continue; 
+		}
+	}
+
 	return 0; 
 }
 
@@ -358,20 +406,20 @@ static int _rawsocket_send(ubus_socket_t socket, int32_t peer, int type, uint16_
 	struct ubus_id *id;  
 	if(peer == UBUS_PEER_BROADCAST){
 		avl_for_each_element(&self->clients, id, avl){
-			struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
+			struct ubus_rawsocket_client *client = (struct ubus_rawsocket_client*)container_of(id, struct ubus_rawsocket_client, id);  
 			struct ubus_frame *req = ubus_frame_new(type, serial, msg);
 			list_add(&req->list, &client->tx_queue); 
 			// try to send as much as we can right away
-			_ubus_client_send(client); 
+			_ubus_rawsocket_client_send(client); 
 			//printf("added request to tx_queue!\n"); 
 		}		
 	} else {
 		struct ubus_id *id = ubus_id_find(&self->clients, peer); 
 		if(!id) return -1; 
-		struct ubus_client *client = (struct ubus_client*)container_of(id, struct ubus_client, id);  
+		struct ubus_rawsocket_client *client = (struct ubus_rawsocket_client*)container_of(id, struct ubus_rawsocket_client, id);  
 		struct ubus_frame *req = ubus_frame_new(type, serial, msg);
 		list_add(&req->list, &client->tx_queue); 
-		_ubus_client_send(client); 
+		_ubus_rawsocket_client_send(client); 
 	}
 	return 0; 	
 }
@@ -396,6 +444,7 @@ ubus_socket_t ubus_rawsocket_new(void){
 		.destroy = _rawsocket_destroy, 
 		.listen = _rawsocket_listen, 
 		.connect = _rawsocket_connect, 
+		.disconnect = _rawsocket_disconnect, 
 		.send = _rawsocket_send, 
 		.handle_events = _rawsocket_handle_events, 
 		.on_message = _rawsocket_on_message, 
