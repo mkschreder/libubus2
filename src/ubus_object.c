@@ -57,12 +57,12 @@ struct ubus_method *ubus_object_find_method(struct ubus_object *self, const char
 
 void ubus_object_serialize(struct ubus_object *self, struct blob *buf){
 	struct list_head *pos = NULL; 
-	blob_offset_t ofs = blob_open_array(buf); 
+	blob_offset_t ofs = blob_open_table(buf); 
 	list_for_each(pos, &self->methods){
 		struct ubus_method *m = container_of(pos, struct ubus_method, list); 
 		blob_put_string(buf, m->name); 
 		blob_put_attr(buf, blob_head(&m->signature)); 	
 	}
-	blob_close_array(buf, ofs); 
+	blob_close_table(buf, ofs); 
 }
 

@@ -237,9 +237,7 @@ static int _rawsocket_connect(ubus_socket_t socket, const char *_address, uint32
 static int _rawsocket_disconnect(ubus_socket_t socket, uint32_t client_id){
 	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
 	struct ubus_id *id = ubus_id_find(&self->clients, client_id); 
-	if(!id) {
-		return -1; 
-	}
+	if(!id) return -1; 
 	struct ubus_rawsocket_client *client = container_of(id, struct ubus_rawsocket_client, id); 
 	return _rawsocket_remove_client(self, &client); 
 }

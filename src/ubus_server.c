@@ -47,11 +47,13 @@ static int _on_list_objects(struct ubus_method *m, struct ubus_context *self, st
 	blob_init(&buf, 0, 0); 
 
 	struct ubus_object *obj = NULL; 
+	blob_offset_t ofs = blob_open_table(&buf); 
 	avl_for_each_element(&self->objects_by_name, obj, avl){
 		//printf("got object %s\n", obj->name); 
 		blob_put_string(&buf, obj->name); 
 		ubus_object_serialize(obj, &buf); 
 	}
+	blob_close_table(&buf, ofs); 
 
 	ubus_request_resolve(req, blob_head(&buf)); 	
 	blob_free(&buf); 

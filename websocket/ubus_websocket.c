@@ -36,7 +36,7 @@ struct ubus_websocket_frame *ubus_websocket_frame_new(struct blob_field *msg){
 	struct ubus_websocket_frame *self = calloc(1, sizeof(struct ubus_websocket_frame)); 
 	INIT_LIST_HEAD(&self->list); 
 	char *json = blob_format_json(msg, false); 
-	printf("frame: %s\n", json); 
+	//printf("frame: %s\n", json); 
 	self->len = strlen(json); 
 	self->buf = calloc(1, LWS_SEND_BUFFER_PRE_PADDING + self->len + LWS_SEND_BUFFER_POST_PADDING); 
 	memcpy(self->buf + LWS_SEND_BUFFER_PRE_PADDING, json, self->len); 
@@ -238,8 +238,8 @@ static int _websocket_send(ubus_socket_t socket, int32_t peer, int type, uint16_
 	if(!id) return -1; 
 	
 	struct ubus_websocket_client *client = (struct ubus_websocket_client*)container_of(id, struct ubus_websocket_client, id);  
-	printf("websocket send: "); 
-	if(msg) blob_field_dump_json(msg); 
+	//printf("websocket send: "); 
+	//if(msg) blob_field_dump_json(msg); 
 	blob_reset(&self->buf); 
 	blob_offset_t ofs = blob_open_table(&self->buf); 
 	blob_put_string(&self->buf, "jsonrpc"); 
