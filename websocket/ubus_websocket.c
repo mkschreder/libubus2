@@ -35,7 +35,7 @@ struct ubus_websocket_frame *ubus_websocket_frame_new(struct blob_field *msg){
 	assert(msg); 
 	struct ubus_websocket_frame *self = calloc(1, sizeof(struct ubus_websocket_frame)); 
 	INIT_LIST_HEAD(&self->list); 
-	char *json = blob_format_json(msg, false); 
+	char *json = blob_field_to_json(msg); 
 	//printf("frame: %s\n", json); 
 	self->len = strlen(json); 
 	self->buf = calloc(1, LWS_SEND_BUFFER_PRE_PADDING + self->len + LWS_SEND_BUFFER_POST_PADDING); 
@@ -46,6 +46,7 @@ struct ubus_websocket_frame *ubus_websocket_frame_new(struct blob_field *msg){
 }
 
 void ubus_websocket_frame_delete(struct ubus_websocket_frame **self){
+	assert(self && *self); 
 	free((*self)->buf); 
 	free(*self); 
 	*self = NULL; 
@@ -103,14 +104,15 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 			break; 
 		}
 		case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-			printf("client error\n"); 
+			printf("websocket: client error\n"); 
 			break; 
 		case LWS_CALLBACK_CLOSED: {
-			printf("client disconnected %p\n", _user); 
+			printf("websocket: client disconnected %p %p\n", _user, *user); 
 			struct ubus_websocket *self = (struct ubus_websocket*)proto->user; 
 			if(self->on_message) self->on_message(&self->api, (*user)->id.id, UBUS_MSG_PEER_DISCONNECTED, 0, NULL); 
 			ubus_id_free(&self->clients, &(*user)->id); 
 			ubus_websocket_client_delete(user); 	
+			*user = 0; 
 			break; 
 		}
 		case LWS_CALLBACK_SERVER_WRITEABLE: {
@@ -139,7 +141,7 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 			struct ubus_websocket *self = (struct ubus_websocket*)proto->user; 
 			//printf("client data %s %p\n", (char*)in, self->buf.buf); 
 			blob_reset(&self->buf); 
-			if(blob_put_json_from_string(&self->buf, in)){
+			if(blob_put_json(&self->buf, in)){
 				struct blob_field *rpcobj = blob_field_first_child(blob_head(&self->buf)); 
 				if(!blob_field_validate(rpcobj, "sssisssa")) break; 
 				if(self->on_message){
@@ -177,12 +179,18 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 	return 0; 
 }
 
-
 void _websocket_destroy(ubus_socket_t socket){
 	struct ubus_websocket *self = container_of(socket, struct ubus_websocket, api); 
-	blob_free(&self->buf); 
+	/*struct ubus_id *id, *tmp; 
+	avl_for_each_element_safe(&self->clients, id, avl, tmp){
+		struct ubus_websocket_client *client = container_of(id, struct ubus_websocket_client, id);  
+		ubus_id_free(&self->clients, &client->id); 
+		ubus_websocket_client_delete(&client); 
+	}*/
 	if(self->ctx) lws_context_destroy(self->ctx); 
+	printf("context destroyed\n"); 
 	free(self->protocols); 
+	blob_free(&self->buf); 
 	free(self);  
 }
 

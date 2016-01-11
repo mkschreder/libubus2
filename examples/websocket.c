@@ -23,9 +23,9 @@ void do_crash_exit(){
 int main(int argc, char **argv){
 	ubus_socket_t insock = ubus_websocket_new(); 
 	ubus_socket_t outsock = ubus_rawsocket_new(); 
-	struct ubus_proxy *proxy = ubus_proxy_new(); 
-	ubus_proxy_listen(proxy, insock, "localhost:1234"); 
-	ubus_proxy_connect(proxy, outsock, "localhost:1235"); 
+	struct ubus_proxy *proxy = ubus_proxy_new(&insock, &outsock); 
+	ubus_proxy_listen(proxy, "localhost:1234"); 
+	ubus_proxy_connect(proxy, "localhost:1235"); 
 
 	signal(SIGINT, handle_sigint); 
 	signal(SIGUSR1, do_crash_exit); 
@@ -43,10 +43,8 @@ int main(int argc, char **argv){
 	}
 	
 	printf("cleaning up\n"); 
-	ubus_socket_delete(insock); 
-	ubus_socket_delete(outsock); 
-	ubus_proxy_delete(&proxy); 
 	ubus_server_delete(&server); 
+	ubus_proxy_delete(&proxy); 
 
 	return 0; 
 }

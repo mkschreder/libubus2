@@ -22,15 +22,19 @@ void ubus_proxy_peer_delete(struct ubus_proxy_peer **self){
 	*self = NULL; 
 }
 
-struct ubus_proxy *ubus_proxy_new(void){
+struct ubus_proxy *ubus_proxy_new(ubus_socket_t *insock, ubus_socket_t *outsock){
 	struct ubus_proxy *self = calloc(1, sizeof(struct ubus_proxy)); 
 	ubus_id_tree_init(&self->clients_in); 
 	ubus_id_tree_init(&self->clients_out); 
+	self->insock = *insock; *insock = NULL; 
+	self->outsock = *outsock; *outsock = NULL; 
 	return self; 
 }
 
 void ubus_proxy_delete(struct ubus_proxy **self){
 	if((*self)->outpath) free((*self)->outpath); 
+	ubus_socket_delete((*self)->insock); 
+	ubus_socket_delete((*self)->outsock); 
 	struct ubus_id *id = 0, *ptr; 
 	avl_for_each_element_safe(&(*self)->clients_in, id, avl, ptr){
 		struct ubus_proxy_peer *peer = container_of(id, struct ubus_proxy_peer, id_in); 
@@ -51,6 +55,7 @@ static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, uint8_t
 			struct ubus_proxy_peer *p = ubus_proxy_peer_new(peer, outpeer); 	
 			ubus_id_alloc(&self->clients_in, &p->id_in, peer); 
 			ubus_id_alloc(&self->clients_out, &p->id_out, outpeer); 
+			printf("proxy: peer connected %08x!\n", p->id_in.id); 
 			//printf("proxy: set up connection between %08x and %08x\n", peer, outpeer); 
 			break; 
 		}
@@ -58,7 +63,7 @@ static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, uint8_t
 			// remove the client binding and close connection to the main server as well
 			struct ubus_id *id = ubus_id_find(&self->clients_in, peer); 
 			if(id){
-				printf("proxy: peer disconnect!\n"); 
+				printf("proxy: peer disconnect %08x!\n", id->id); 
 				struct ubus_proxy_peer *p = container_of(id, struct ubus_proxy_peer, id_in); 
 				ubus_socket_disconnect(self->outsock, p->id_out.id); 
 				ubus_id_free(&self->clients_out, &p->id_out); 
@@ -99,19 +104,17 @@ int ubus_proxy_handle_events(struct ubus_proxy *self){
 	return 0; 
 }
 
-int ubus_proxy_listen(struct ubus_proxy *self, ubus_socket_t sock, const char *path){
-	self->insock = sock; 
-	ubus_socket_listen(sock, path); 
-	ubus_socket_set_userdata(sock, self); 
-	ubus_socket_on_message(sock, _on_in_message_received); 
+int ubus_proxy_listen(struct ubus_proxy *self, const char *path){
+	ubus_socket_listen(self->insock, path); 
+	ubus_socket_set_userdata(self->insock, self); 
+	ubus_socket_on_message(self->insock, _on_in_message_received); 
 	return 0; 
 }
 
-int ubus_proxy_connect(struct ubus_proxy *self, ubus_socket_t sock, const char *path){
-	self->outsock = sock; 
+int ubus_proxy_connect(struct ubus_proxy *self, const char *path){
 	self->outpath = strdup(path); 
-	ubus_socket_set_userdata(sock, self); 
-	ubus_socket_on_message(sock, _on_out_message_received); 
+	ubus_socket_set_userdata(self->outsock, self); 
+	ubus_socket_on_message(self->outsock, _on_out_message_received); 
 	return 0; 
 }
 

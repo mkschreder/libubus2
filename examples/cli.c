@@ -97,7 +97,7 @@ static int _command_call(struct ubus_context *ctx, int argc, char **argv){
 	blob_init(&buf, 0, 0); 
 	if(argc < 2) return usage("prog"); 
 	if(argc == 3)
-		blob_put_json_from_string(&buf, argv[2]); 
+		blob_put_json(&buf, argv[2]); 
 	struct ubus_request *req = ubus_request_new("server", argv[0], argv[1], blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_call_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
