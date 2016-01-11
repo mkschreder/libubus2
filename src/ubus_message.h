@@ -19,7 +19,7 @@
 
 enum ubus_msg_type {
 	// initial server message
-	UBUS_MSG_HELLO,
+	UBUS_MSG_INVALID,
 
 	// method call
 	UBUS_MSG_METHOD_CALL, 

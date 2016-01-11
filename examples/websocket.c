@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include "../src/libubus2.h"
-#include "../websocket/ubus_websocket.h"
+#include "../sockets/json_websocket.h"
 
 bool running = true; 
 
@@ -21,7 +21,7 @@ void do_crash_exit(){
 }
 
 int main(int argc, char **argv){
-	ubus_socket_t insock = ubus_websocket_new(); 
+	ubus_socket_t insock = json_websocket_new(); 
 	ubus_socket_t outsock = ubus_rawsocket_new(); 
 	struct ubus_proxy *proxy = ubus_proxy_new(&insock, &outsock); 
 	ubus_proxy_listen(proxy, "localhost:1234"); 

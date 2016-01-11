@@ -247,7 +247,6 @@ void ubus_context_init(struct ubus_context *self, const char *name, ubus_socket_
 	else self->socket = ubus_rawsocket_new();  
 	ubus_socket_set_userdata(self->socket, self); 
 	ubus_socket_on_message(self->socket, &_on_message_received); 
-	//ubus_socket_on_client_connected(self->socket, &_on_client_connected); 
 	blob_init(&self->buf, 0, 0); 
 	self->name = strdup(name);
 	self->request_seq = 1; 

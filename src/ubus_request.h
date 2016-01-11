@@ -16,7 +16,6 @@
 #include <blobpack/blobpack.h>
 #include <libusys/uloop_timeout.h>
 
-
 struct ubus_request; 
 
 typedef void (*ubus_request_cb_t)(struct ubus_request *req, struct blob_field *msg); 

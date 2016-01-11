@@ -2,6 +2,8 @@
 
 #include <inttypes.h>
 
+#define UBUS_PEER_BROADCAST (-1)
+
 struct ubus_socket_api; 
 typedef const struct ubus_socket_api** ubus_socket_t; 
 struct blob_field; 

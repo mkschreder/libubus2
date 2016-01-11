@@ -4,6 +4,7 @@
 #include <libutype/utils.h>
 
 #include "../src/libubus2.h"
+#include "../sockets/json_socket.h"
 
 static int done = 0; 
 
@@ -34,12 +35,13 @@ void _on_call_done(struct ubus_request *req, struct blob_field *res){
 }
 
 void _on_list_done(struct ubus_request *req, struct blob_field *res){
-	if(!blob_field_validate(res, "s[sa]")) {
+	res = blob_field_first_child(res); 
+	if(!blob_field_validate(res, "s{sa}")) {
 		fprintf(stderr, "Invalid data returned from server!\n"); 
 		blob_field_dump_json(res); 
 		return; 
 	}
-	
+
 	struct blob_field *key, *value; 
 	blob_field_for_each_kv(res, key, value){
 		printf("%s\n", blob_field_get_string(key)); 
@@ -148,8 +150,9 @@ int main(int argc, char **argv)
 	cmd = argv[0];
 	if (argc < 1)
 		return usage(progname);
-
-	struct ubus_context *ctx = ubus_new("ubus-cli", NULL); 
+	
+	ubus_socket_t sock = json_socket_new(); 
+	struct ubus_context *ctx = ubus_new("ubus-cli", &sock); 
 	uint32_t id = 0; 
 	if(ubus_connect(ctx, ubus_socket, &id) < 0){
 		if (!simple_output)
