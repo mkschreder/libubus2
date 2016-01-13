@@ -35,6 +35,9 @@ void _on_call_done(struct ubus_request *req, struct blob_field *res){
 }
 
 void _on_list_done(struct ubus_request *req, struct blob_field *res){
+	blob_field_dump_json(res); 
+	done = 1; 
+	return; 
 	res = blob_field_first_child(res); 
 	if(!blob_field_validate(res, "s{sa}")) {
 		fprintf(stderr, "Invalid data returned from server!\n"); 
@@ -85,7 +88,9 @@ void _on_request_failed(struct ubus_request *req, struct blob_field *res){
 static int _command_list(struct ubus_context *ctx, int argc, char **argv){
 	struct blob buf; 
 	blob_init(&buf, 0, 0); 
-	struct ubus_request *req = ubus_request_new("server", "/ubus/peer", "ubus.peer.list", blob_head(&buf)); 
+	blob_offset_t ofs = blob_open_table(&buf); 
+	blob_close_table(&buf, ofs); 
+	struct ubus_request *req = ubus_request_new("server", "/ubus/peer", "ubus.peer.list", blob_field_first_child(blob_head(&buf))); 
 	ubus_request_on_resolve(req, &_on_list_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(ctx, &req); 
@@ -100,7 +105,7 @@ static int _command_call(struct ubus_context *ctx, int argc, char **argv){
 	if(argc < 2) return usage("prog"); 
 	if(argc == 3)
 		blob_put_json(&buf, argv[2]); 
-	struct ubus_request *req = ubus_request_new("server", argv[0], argv[1], blob_head(&buf)); 
+	struct ubus_request *req = ubus_request_new("server", argv[0], argv[1], blob_field_first_child(blob_head(&buf))); 
 	ubus_request_on_resolve(req, &_on_call_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
 	ubus_send_request(ctx, &req); 

@@ -81,8 +81,8 @@ static struct ubus_json_client *ubus_json_client_new(int fd){
 	struct ubus_json_client *self = calloc(1, sizeof(struct ubus_json_client)); 
 	INIT_LIST_HEAD(&self->tx_queue); 
 	self->fd = fd; 
-	self->recv_buffer = calloc(1, 1024); 
-	self->recv_size = 1024; 
+	self->recv_size = 16535; 
+	self->recv_buffer = calloc(1, self->recv_size); 
 	self->recv_count = 0; 
 	blob_init(&self->buf, 0, 0); 
 	return self; 

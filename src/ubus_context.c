@@ -340,7 +340,7 @@ static void _ubus_send_pending(struct ubus_context *self){
 		//blob_put_string(&self->buf, ""); 
 		blob_put_string(&self->buf, req->object); 
 		blob_put_string(&self->buf, req->method); 
-		blob_put_attr(&self->buf, blob_head(&req->buf)); 
+		blob_put_attr(&self->buf, blob_field_first_child(blob_head(&req->buf))); 
 		ubus_socket_send(self->socket, peer->id, UBUS_MSG_METHOD_CALL, req->seq, blob_head(&self->buf)); 
 
 		// move the request to pending queue
