@@ -11,7 +11,7 @@
  * GNU General Public License for more details.
  */
 
-#include <libubus2/libubus2.h>
+#include "../src/libubus2.h"
 
 void on_message1(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
 	printf("message1: from %08x\n", peer); 
