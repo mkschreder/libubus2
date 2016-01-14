@@ -216,7 +216,7 @@ int _websocket_listen(ubus_socket_t socket, const char *path){
 	int addrlen = strlen(path); 
 	char *address = alloca(addrlen);
 	strcpy(address, path); 
-	const char *host, *port; 
+	const char *host = "", *port = "0"; 
 	_parse_address(address, &host, &port); 
 
 	info.port = atoi(port);

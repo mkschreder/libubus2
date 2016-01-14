@@ -17,7 +17,7 @@ SOURCE=\
 	sockets/json_websocket.c \
 	sockets/json_socket.c
 
-INSTALL_PREFIX:=/usr
+INSTALL_PREFIX:=$(DESTDIR)/usr/
 
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
@@ -41,22 +41,22 @@ $(STATIC_LIB): $(OBJECTS)
 	$(AR) rcs -o $@ $^
 
 threads-example: examples/threads.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/threads.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/threads.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
 
 client-example: examples/client.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/client.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/client.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
 
 socket-example: examples/socket.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/socket.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/socket.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
 
 cli-example: examples/cli.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/cli.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/cli.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
 
 ubus1-example: examples/ubus1_proxy.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/ubus1_proxy.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/ubus1_proxy.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
 
 websocket-example: examples/websocket.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/websocket.o $(LDFLAGS) -L$(BUILD_DIR) -lubus2 -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/websocket.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
