@@ -2,6 +2,9 @@
 
 #include <blobpack/blobpack.h>
 
+struct ubus_socket_api; 
+typedef const struct ubus_socket_api** ubus_socket_t; 
+
 ubus_socket_t json_websocket_new(void); 
 
 /*void json_websocket_delete(struct json_websocket **self); 

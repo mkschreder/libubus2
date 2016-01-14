@@ -76,7 +76,7 @@ static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, uint8_t
 			struct ubus_id *id = ubus_id_find(&self->clients_in, peer); 
 			if(!id) break; 
 			struct ubus_proxy_peer *p = container_of(id, struct ubus_proxy_peer, id_in); 
-			//printf("proxy: proxy request from %08x to %08x\n", peer, p->outpeer); 
+			printf("proxy: proxy request from %08x to %08x\n", peer, p->outpeer); 
 			ubus_socket_send(self->outsock, p->outpeer, type, serial, msg); 
 			break; 
 		}

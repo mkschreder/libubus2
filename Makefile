@@ -66,7 +66,7 @@ install:
 	mkdir -p $(INSTALL_PREFIX)/lib/
 	mkdir -p $(INSTALL_PREFIX)/include/libubus2/
 	cp -R $(SHARED_LIB) $(STATIC_LIB) $(INSTALL_PREFIX)/lib
-	cp -R src/*.h $(INSTALL_PREFIX)/include/libubus2/
+	cp -R src/*.h sockets/*.h $(INSTALL_PREFIX)/include/libubus2/
 clean: 
 	rm -rf build_dir
 	rm -f examples/*.o

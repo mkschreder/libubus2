@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "../src/libubus2.h"
 #include "../sockets/json_websocket.h"
+#include "../sockets/json_socket.h"
 
 bool running = true; 
 
@@ -22,28 +23,28 @@ void do_crash_exit(){
 
 int main(int argc, char **argv){
 	ubus_socket_t insock = json_websocket_new(); 
-	ubus_socket_t outsock = ubus_rawsocket_new(); 
+	ubus_socket_t outsock = json_socket_new(); 
 	struct ubus_proxy *proxy = ubus_proxy_new(&insock, &outsock); 
 	ubus_proxy_listen(proxy, "localhost:1234"); 
-	ubus_proxy_connect(proxy, "localhost:1235"); 
+	ubus_proxy_connect(proxy, "/tmp/router-ubus-json.sock"); 
 
 	signal(SIGINT, handle_sigint); 
 	signal(SIGUSR1, do_crash_exit); 
-
+/*
 	struct ubus_server *server = ubus_server_new("ubus", NULL); 
 
 	if(ubus_server_listen(server, "localhost:1235") < 0){
 		fprintf(stderr, "server could not listen on specified socket!\n"); 
 		return 0; 
 	}
-
+*/
 	while(running){
 		ubus_proxy_handle_events(proxy); 
-		ubus_server_handle_events(server); 
+		//ubus_server_handle_events(server); 
 	}
 	
 	printf("cleaning up\n"); 
-	ubus_server_delete(&server); 
+	//ubus_server_delete(&server); 
 	ubus_proxy_delete(&proxy); 
 
 	return 0; 

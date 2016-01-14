@@ -34,7 +34,8 @@
 #include <blobpack/blobpack.h>
 
 #include "json_socket.h"
-#include "../src/ubus_message.h"
+#include "ubus_socket.h"
+#include "ubus_message.h"
 #include <assert.h>
 
 #define STATIC_IOV(_var) { .iov_base = (char *) &(_var), .iov_len = sizeof(_var) }

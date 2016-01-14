@@ -1,9 +1,11 @@
-#include <libubus2/libubus2.h>
 #include <blobpack/blobpack.h>
 
 #include "json_websocket.h"
 #include "../src/ubus_message.h"
+#include "../src/ubus_socket.h"
+#include "../src/ubus_id.h"
 #include <libutype/list.h>
+#include <libutype/avl.h>
 #include <libwebsockets.h>
 #include <assert.h>
 

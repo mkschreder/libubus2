@@ -14,11 +14,9 @@
 #pragma once
 
 #include <inttypes.h>
-#include <libubox/blobmsg.h>
-#include <libubox/list.h>
-#include <libubox/avl.h>
 
-#include <../src/ubus_socket.h>
+struct ubus_socket_api; 
+typedef const struct ubus_socket_api** ubus_socket_t; 
 
 ubus_socket_t json_socket_new(void); 
 
