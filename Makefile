@@ -4,7 +4,6 @@ SHARED_LIB=libubus2.so
 SOURCE=\
 	src/ubus_context.c \
 	src/ubus_client.c \
-	src/ubus_method.c \
 	src/ubus_object.c \
 	src/ubus_method.c \
 	src/ubus_id.c \
@@ -41,22 +40,22 @@ $(STATIC_LIB): $(OBJECTS)
 	$(AR) rcs -o $@ $^
 
 threads-example: examples/threads.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/threads.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $(OBJECTS) examples/threads.o $(LDFLAGS) -L$(BUILD_DIR) -lpthread
 
 client-example: examples/client.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/client.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $(OBJECTS) examples/client.o $(LDFLAGS) -L$(BUILD_DIR) -lpthread
 
 socket-example: examples/socket.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/socket.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $(OBJECTS) examples/socket.o $(LDFLAGS) -L$(BUILD_DIR) -lpthread
 
 cli-example: examples/cli.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/cli.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $(OBJECTS) examples/cli.o $(LDFLAGS) -L$(BUILD_DIR) -lpthread
 
 ubus1-example: examples/ubus1_proxy.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/ubus1_proxy.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $(OBJECTS) examples/ubus1_proxy.o $(LDFLAGS) -L$(BUILD_DIR) -lpthread
 
 websocket-example: examples/websocket.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ examples/websocket.o $(LDFLAGS) -L$(BUILD_DIR) $(OBJECTS) -lpthread
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $(OBJECTS) examples/websocket.o $(LDFLAGS) -L$(BUILD_DIR) -lpthread
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
