@@ -21,7 +21,7 @@ INSTALL_PREFIX:=$(DESTDIR)/usr/
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
 CFLAGS+=-g -Isrc -Wall -Werror -std=gnu99 -Wmissing-field-initializers
-LDFLAGS+=-lblobpack -lusys -lutype -ljson-c -ldl -lwebsockets -lm
+LDFLAGS+=-lblobpack -lusys -lutype -ldl -lwebsockets -lm
 
 all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) ubus1-example cli-example socket-example client-example threads-example websocket-example
 
