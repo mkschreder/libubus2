@@ -21,8 +21,8 @@ struct ubus_client *ubus_client_new(const char *name){
 	struct ubus_client *self = calloc(1, sizeof(struct ubus_client)); 
 	self->ctx = ubus_new(name, NULL); 
 
-	struct ubus_object *obj = ubus_object_new("/ubus/peer"); 
-	struct ubus_method *method = ubus_method_new("ubus.peer.list", _on_ubus_client_list); 
+	struct ubus_object *obj = ubus_object_new("ubus"); 
+	struct ubus_method *method = ubus_method_new("list", _on_ubus_client_list); 
 	ubus_object_add_method(obj, &method); 
 	ubus_object_set_userdata(obj, self); 
 

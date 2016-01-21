@@ -55,7 +55,7 @@ struct ubus_object *_find_object_by_name(struct ubus_context *self, const char *
 	return container_of(avl, struct ubus_object, avl); 
 }
 
-void _on_msg_signal(struct ubus_context *self, struct ubus_peer *peer, uint16_t serial, struct blob_field *msg){
+void _on_msg_signal(struct ubus_context *self, struct ubus_peer *peer, uint32_t serial, struct blob_field *msg){
 	// first argument is always signal type
 	struct blob_field *attr = blob_field_first_child(msg); 
 	const char *signal_name = blob_field_get_string(attr); 
@@ -94,11 +94,17 @@ static void _on_reject_method_call(struct ubus_request *req, struct blob_field *
 	//printf("sending error to %08x\n", req->src_id); 
 	
 	blob_reset(&self->buf); 
-	blob_put_attr(&self->buf, msg); 
+	struct blob_field *cur; 
+	blob_field_for_each_child(msg, cur){
+		blob_put_attr(&self->buf, cur); 
+	}
 	ubus_socket_send(self->socket, req->src_id, UBUS_MSG_ERROR, req->seq, blob_head(&self->buf));  
 }
 
-static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint16_t serial, struct blob_field *msg){
+static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint32_t serial, struct blob_field *msg){
+	struct blob buf; 
+	blob_init(&buf, 0, 0); 
+	
 	// arg 2: object path
 	// arg 3: method name
 	// arg 4: arguments
@@ -107,9 +113,6 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 	attr = blob_field_next_child(msg, attr); 
 	const char *method = blob_field_get_string(attr); 
 	attr = blob_field_next_child(msg, attr); 
-
-	struct blob buf; 
-	blob_init(&buf, 0, 0); 
 
 	// find the object being refered to in our local list 
 	struct ubus_object *obj = _find_object_by_name(self, object); 
@@ -157,7 +160,7 @@ free:
 	blob_free(&buf); 
 }
 
-static void _on_msg_return(struct ubus_context *self, struct ubus_peer *peer, uint16_t serial, struct blob_field *msg){
+static void _on_msg_return(struct ubus_context *self, struct ubus_peer *peer, uint32_t serial, struct blob_field *msg){
 	//printf("got return for request %d\n", serial); 
 	struct ubus_request *req, *tmp, *found = NULL; 
 	// find the pending outgoing request that has the same serial 
@@ -173,7 +176,7 @@ static void _on_msg_return(struct ubus_context *self, struct ubus_peer *peer, ui
 	ubus_request_delete(&req); 
 }
 
-static void _on_msg_error(struct ubus_context *self, struct ubus_peer *peer, uint16_t serial, struct blob_field *msg){
+static void _on_msg_error(struct ubus_context *self, struct ubus_peer *peer, uint32_t serial, struct blob_field *msg){
 	struct ubus_request *req, *tmp, *found = NULL; 
 	// find the pending outgoing request that has the same serial 
 	list_for_each_entry_safe(req, tmp, &self->pending, list){
@@ -340,7 +343,7 @@ static void _ubus_send_pending(struct ubus_context *self){
 		//blob_put_string(&self->buf, ""); 
 		blob_put_string(&self->buf, req->object); 
 		blob_put_string(&self->buf, req->method); 
-		blob_put_attr(&self->buf, blob_field_first_child(blob_head(&req->buf))); 
+		blob_put_attr(&self->buf, blob_head(&req->buf)); 
 		ubus_socket_send(self->socket, peer->id, UBUS_MSG_METHOD_CALL, req->seq, blob_head(&self->buf)); 
 
 		// move the request to pending queue

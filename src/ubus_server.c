@@ -65,12 +65,14 @@ static int _on_publish_object(struct ubus_method *m, struct ubus_context *ctx, s
 	assert(msg); 
 
 	struct ubus_server *self = ubus_get_userdata(ctx); 
-	//printf("server: on_publish_object from %s!\n", req->dst_name); 	
 	char path[255]; 
 	struct blob_field *params[3]; 
 
 	msg = blob_field_first_child(msg); 
-	if(!blob_field_parse(msg, "s[sa]", params, 2)) return UBUS_STATUS_INVALID_ARGUMENT; 
+
+	if(!blob_field_parse(msg, "s{sa}", params, 2)) {
+		return UBUS_STATUS_INVALID_ARGUMENT; 
+	}
 	const char *objname = blob_field_get_string(params[0]); 	
 
 	//blob_field_dump_json(msg); 

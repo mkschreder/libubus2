@@ -264,7 +264,7 @@ static bool _ubus_json_client_recv(struct ubus_json_client *self, struct json_so
 					bool valid = false, error = false, result = false; 
 					struct blob_field *params = NULL; 
 					const char *method = NULL; 
-					int type = 0, id = 0; 
+					int id = 0; 
 					blob_field_for_each_kv(blob_field_first_child(blob_head(&self->buf)), key, value){
 						const char *k = blob_field_get_string(key); 
 						if(strcmp(k, "jsonrpc") == 0 && strcmp(blob_field_get_string(value), "2.0") == 0) valid = true; 
@@ -274,12 +274,11 @@ static bool _ubus_json_client_recv(struct ubus_json_client *self, struct json_so
 						else if(strcmp(k, "result") == 0) { params = value; result = true; }
 						else if(strcmp(k, "error") == 0) { params = value; error = true; } 
 					}
-					if(method && strcmp(method, "call")) type = UBUS_MSG_METHOD_CALL; 
-					else if(method && strcmp(method, "signal")) type = UBUS_MSG_SIGNAL; 
-					else if(result) type = UBUS_MSG_METHOD_RETURN; 
-					else if(error) type = UBUS_MSG_ERROR; 
-					if(valid && params) {
-						socket->on_message(&socket->api, self->id.id, type, id, params); 
+					if(valid){
+						if(id && method) socket->on_message(&socket->api, self->id.id, UBUS_MSG_METHOD_CALL, id, params);  
+						else if(!id && method) socket->on_message(&socket->api, self->id.id, UBUS_MSG_SIGNAL, 0, params); 
+						else if(result) socket->on_message(&socket->api, self->id.id, UBUS_MSG_METHOD_RETURN, id, params);  
+						else if(error) socket->on_message(&socket->api, self->id.id, UBUS_MSG_ERROR, id, params);  
 					}
 				}
 				int pos = (ch - self->recv_buffer + 1); 

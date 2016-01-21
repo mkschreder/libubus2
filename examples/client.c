@@ -37,12 +37,13 @@ static int _app_shutdown(struct ubus_method *self, struct ubus_context *ctx, str
 }
 
 void _on_request_done(struct ubus_request *req, struct blob_field *res){
-	printf("request succeeded! %s %s\n", req->object, req->method); 
-	blob_field_dump_json_pretty(res); 
+	printf("client-test: request succeeded! %s %s\n", req->object, req->method); 
+	blob_field_dump_json(res); 
 }
 
 void _on_request_failed(struct ubus_request *req, struct blob_field *res){
-	printf("request failed!\n"); 
+	printf("client-test: request failed!\n"); 
+	blob_field_dump_json(res); 
 }
 
 void *_server_thread(void *arg){
