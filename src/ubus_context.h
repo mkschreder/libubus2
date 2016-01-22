@@ -33,8 +33,9 @@ struct ubus_context {
 	struct avl_tree peers_by_id;
 	struct avl_tree peers_by_name;
 
-	struct avl_tree objects_by_name; 
-	struct avl_tree objects_by_id; 
+	//struct avl_tree objects_by_name; 
+	//struct avl_tree objects_by_id; 
+	struct ubus_object *root_obj; 
 
 	struct list_head requests;
 	struct list_head pending; 
@@ -51,7 +52,7 @@ struct ubus_context {
 	void *user_data; 
 };
 
-struct ubus_context *ubus_new(const char *name, ubus_socket_t *socket);
+struct ubus_context *ubus_new(const char *name, ubus_socket_t *socket, struct ubus_object **root);
 void ubus_delete(struct ubus_context **self); 
 int ubus_connect(struct ubus_context *self, const char *path, uint32_t *peer_id); 
 int ubus_set_peer_localname(struct ubus_context *self, uint32_t peer, const char *localname); 
@@ -59,7 +60,7 @@ int ubus_set_peer_localname(struct ubus_context *self, uint32_t peer, const char
 int ubus_listen(struct ubus_context *self, const char *path); 
 
 int ubus_send_request(struct ubus_context *self, struct ubus_request **req); 
-uint32_t ubus_add_object(struct ubus_context *self, struct ubus_object **obj); 
+//uint32_t ubus_add_object(struct ubus_context *self, struct ubus_object **obj); 
 int ubus_handle_events(struct ubus_context *self); 
 
 const char *ubus_status_to_string(int8_t status); 

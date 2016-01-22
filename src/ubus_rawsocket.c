@@ -50,8 +50,8 @@ struct ubus_rawsocket {
 
 struct ubus_msg_header {
 	uint8_t hdr_size; 	// works as a magic. Must always be sizeof(struct ubus_msg_header)
-	uint8_t type;  		// type of request 
-	uint16_t seq;		// request sequence that is set by sender 
+	//uint8_t type;  		// type of request 
+	//uint16_t seq;		// request sequence that is set by sender 
 	uint16_t crc; 		// sum of the data portion
 	uint32_t data_size;	// length of the data that follows 
 } __attribute__((packed)) __attribute__((__aligned__(4))); 
@@ -105,13 +105,13 @@ static void ubus_rawsocket_client_delete(struct ubus_rawsocket_client **self){
 	*self = NULL;
 }
 
-struct ubus_frame *ubus_frame_new(int type, uint16_t seq, struct blob_field *msg){
+struct ubus_frame *ubus_frame_new(struct blob_field *msg){
 	assert(msg); 
 	struct ubus_frame *self = calloc(1, sizeof(struct ubus_frame)); 
 	blob_init(&self->data, (char*)msg, blob_field_raw_pad_len(msg)); 
 	INIT_LIST_HEAD(&self->list); 
-	self->hdr.type = type;  
-	self->hdr.seq = seq; 
+	//self->hdr.type = type;  
+	//self->hdr.seq = seq; 
 	self->hdr.crc = _crc16((char*)msg, blob_field_raw_len(msg)); 
 	//self->hdr.data_size = cpu_to_be32((uint32_t)blob_field_pad_len(msg)); 
 	//printf("new frame size %d, be: %d\n", blob_field_pad_len(msg), cpu_to_be32(blob_field_pad_len(msg))); 
@@ -128,7 +128,7 @@ void ubus_frame_delete(struct ubus_frame **self){
 static int _rawsocket_remove_client(struct ubus_rawsocket *self, struct ubus_rawsocket_client **client){
 	printf("rawsocket: remove client %08x\n", (*client)->id.id); 
 	ubus_id_free(&self->clients, &(*client)->id); 
-	if(self->on_message) self->on_message(&self->api, (*client)->id.id, UBUS_MSG_PEER_DISCONNECTED, 0, 0); 
+	//if(self->on_client_message) self->on_client_message(&self->api, (*client)->id.id, UBUS_MSG_PEER_DISCONNECTED, NULL); 
 	ubus_rawsocket_client_delete(client); 
 	return 0; 
 }
@@ -166,9 +166,7 @@ static void _accept_connection(struct ubus_rawsocket *self){
 		struct ubus_rawsocket_client *cl = ubus_rawsocket_client_new(client); 
 		ubus_id_alloc(&self->clients, &cl->id, 0); 
 		
-		if(self->on_message){
-			self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
-		}
+		//if(self->on_message) self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
 	} while (!done);
 }
 
@@ -225,9 +223,9 @@ static int _rawsocket_connect(ubus_socket_t socket, const char *_address, uint32
 	ubus_id_alloc(&self->clients, &cl->id, 0); 
 	
 	// connecting out generates the same event as connecting in
-	if(self->on_message){
-		self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
-	}
+	//if(self->on_message){
+//		self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, NULL, 0); 
+//	}
 
 	if(id) *id = cl->id.id; 
 
@@ -293,7 +291,7 @@ void _ubus_rawsocket_client_recv(struct ubus_rawsocket_client *self, struct ubus
 				return;  
 			} else {
 				if(socket->on_message){
-					socket->on_message(&socket->api, self->id.id, self->hdr.type, self->hdr.seq, msg); 
+					socket->on_message(&socket->api, self->id.id, msg); 
 				}
 			}
 			self->recv_count = 0; 
@@ -399,13 +397,13 @@ static int _rawsocket_handle_events(ubus_socket_t socket, int timeout){
 	return 0; 
 }
 
-static int _rawsocket_send(ubus_socket_t socket, int32_t peer, int type, uint16_t serial, struct blob_field *msg){
+static int _rawsocket_send(ubus_socket_t socket, int32_t peer, struct blob_field *msg){
 	struct ubus_rawsocket *self = container_of(socket, struct ubus_rawsocket, api); 
 	struct ubus_id *id;  
 	if(peer == UBUS_PEER_BROADCAST){
 		avl_for_each_element(&self->clients, id, avl){
 			struct ubus_rawsocket_client *client = (struct ubus_rawsocket_client*)container_of(id, struct ubus_rawsocket_client, id);  
-			struct ubus_frame *req = ubus_frame_new(type, serial, msg);
+			struct ubus_frame *req = ubus_frame_new(msg);
 			list_add(&req->list, &client->tx_queue); 
 			// try to send as much as we can right away
 			_ubus_rawsocket_client_send(client); 
@@ -415,7 +413,7 @@ static int _rawsocket_send(ubus_socket_t socket, int32_t peer, int type, uint16_
 		struct ubus_id *id = ubus_id_find(&self->clients, peer); 
 		if(!id) return -1; 
 		struct ubus_rawsocket_client *client = (struct ubus_rawsocket_client*)container_of(id, struct ubus_rawsocket_client, id);  
-		struct ubus_frame *req = ubus_frame_new(type, serial, msg);
+		struct ubus_frame *req = ubus_frame_new(msg);
 		list_add(&req->list, &client->tx_queue); 
 		_ubus_rawsocket_client_send(client); 
 	}

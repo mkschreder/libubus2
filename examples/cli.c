@@ -157,7 +157,7 @@ int main(int argc, char **argv)
 		return usage(progname);
 	
 	ubus_socket_t sock = json_socket_new(); 
-	struct ubus_context *ctx = ubus_new("ubus-cli", &sock); 
+	struct ubus_context *ctx = ubus_new("ubus-cli", &sock, NULL); 
 	uint32_t id = 0; 
 	if(ubus_connect(ctx, ubus_socket, &id) < 0){
 		if (!simple_output)

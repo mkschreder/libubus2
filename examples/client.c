@@ -63,10 +63,11 @@ void *_server_thread(void *arg){
 }
 
 void *_client_thread(void *arg){
-	struct ubus_context *client = ubus_new("client", NULL); 
+	struct ubus_context *client = ubus_new("client", NULL, NULL); 
 
 	if(ubus_connect(client, "./ubus.sock", NULL) < 0){
 		fprintf(stderr, "%s: could not connect to ubus!\n", __FUNCTION__); 
+		ubus_delete(&client); 
 		return NULL;
 	}
 	
@@ -85,7 +86,7 @@ void *_client_thread(void *arg){
 	blob_put_string(&buf, obj->name); 	
 	ubus_object_serialize(obj, &buf); 
 
-	ubus_add_object(client, &obj); 
+	//ubus_add_object(client, &obj); 
 
 	// TODO: resolve the peer_id of "client" peer on server through user!
 	// we can find out peer_id by looking at the objects on server peer (will be 0 if objects are native to server, otherwise will have ids as they are known to server peer)
@@ -102,7 +103,7 @@ void *_client_thread(void *arg){
 	blob_put_string(&buf, obj->name); 	
 	ubus_object_serialize(obj, &buf); 
 
-	ubus_add_object(client, &obj); 
+	//ubus_add_object(client, &obj); 
 	req = ubus_request_new("ubus", "/ubus/server", "ubus.server.publish", blob_head(&buf)); 
 	ubus_request_on_resolve(req, &_on_request_done); 
 	ubus_request_on_reject(req, &_on_request_failed); 
@@ -127,7 +128,7 @@ int main(int argc, char **argv){
 	usleep(2000000); 
 
 	pthread_create(&client, NULL, _client_thread, NULL); 
-	struct ubus_context *user = ubus_new("user", NULL); 
+	struct ubus_context *user = ubus_new("user", NULL, NULL); 
 
 	struct blob buf; 
 	blob_init(&buf, 0, 0); 

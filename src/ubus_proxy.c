@@ -44,9 +44,33 @@ void ubus_proxy_delete(struct ubus_proxy **self){
 	*self = NULL; 
 }
 
-static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
+static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, struct blob_field *msg){
 	struct ubus_proxy *self = (struct ubus_proxy*)ubus_socket_get_userdata(socket); 
-	switch(type){
+	struct ubus_id *id = ubus_id_find(&self->clients_in, peer); 
+	struct ubus_proxy_peer *p = NULL; 
+	if(id){
+		p = container_of(id, struct ubus_proxy_peer, id_in); 
+	} else {
+		if(!self->outsock) return; 
+		uint32_t outpeer = 0; 
+		if(ubus_socket_connect(self->outsock, self->outpath, &outpeer) < 0){
+			printf("proxy: could not connect to outgoing socket! %s\n", self->outpath);
+			return; 
+		}
+		p = ubus_proxy_peer_new(peer, outpeer); 	
+		ubus_id_alloc(&self->clients_in, &p->id_in, peer); 
+		ubus_id_alloc(&self->clients_out, &p->id_out, outpeer); 
+		printf("proxy: peer connected %08x!\n", p->id_in.id); 
+		//printf("proxy: set up connection between %08x and %08x\n", peer, outpeer); 
+
+	} 
+	printf("proxy: proxy request from %08x to %08x\n", peer, p->outpeer); 
+	printf("proxy request message: "); blob_field_dump_json(msg); 
+	ubus_socket_send(self->outsock, p->outpeer, msg); 
+	
+	return; 
+	//TODO: fix client connect/disconnect
+	/*switch(type){
 		case UBUS_MSG_PEER_CONNECTED: {
 			// TODO: handle disconnects
 			if(!self->outsock) break; 
@@ -77,25 +101,20 @@ static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, uint8_t
 			if(!id) break; 
 			struct ubus_proxy_peer *p = container_of(id, struct ubus_proxy_peer, id_in); 
 			printf("proxy: proxy request from %08x to %08x\n", peer, p->outpeer); 
-			ubus_socket_send(self->outsock, p->outpeer, type, serial, msg); 
+			ubus_socket_send(self->outsock, p->outpeer, msg); 
 			break; 
 		}
-	}
+	}*/
 }
 
-static void _on_out_message_received(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
+static void _on_out_message_received(ubus_socket_t socket, uint32_t peer, struct blob_field *msg){
 	struct ubus_proxy *self = (struct ubus_proxy*)ubus_socket_get_userdata(socket); 
-	switch(type){
-		default: {
-			struct ubus_id *id = ubus_id_find(&self->clients_out, peer); 
-			if(!id) break; 
-			struct ubus_proxy_peer *p = container_of(id, struct ubus_proxy_peer, id_out); 
-			//printf("proxy: proxy response from %08x to %08x\n", peer, p->inpeer); 
-			ubus_socket_send(self->insock, p->inpeer, type, serial, msg); 
-			break; 
-		}
-
-	}
+	struct ubus_id *id = ubus_id_find(&self->clients_out, peer); 
+	if(!id) return; 
+	struct ubus_proxy_peer *p = container_of(id, struct ubus_proxy_peer, id_out); 
+	//printf("proxy: proxy response from %08x to %08x\n", peer, p->inpeer); 
+	printf("proxy return message: "); blob_field_dump_json(msg); 
+	ubus_socket_send(self->insock, p->inpeer, msg); 
 }
 
 int ubus_proxy_handle_events(struct ubus_proxy *self){

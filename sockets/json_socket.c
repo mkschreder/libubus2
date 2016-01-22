@@ -98,7 +98,7 @@ static void ubus_json_client_delete(struct ubus_json_client **self){
 	*self = NULL;
 }
 
-struct ubus_json_frame *ubus_json_frame_new(int type, uint16_t seq, struct blob_field *msg){
+struct ubus_json_frame *ubus_json_frame_new(struct blob_field *msg){
 	assert(msg); 
 	struct ubus_json_frame *self = calloc(1, sizeof(struct ubus_json_frame)); 
 	char *json = blob_field_to_json(msg); 
@@ -161,9 +161,9 @@ static void _accept_connection(struct json_socket *self){
 		struct ubus_json_client *cl = ubus_json_client_new(client); 
 		ubus_id_alloc(&self->clients, &cl->id, 0); 
 		
-		if(self->on_message){
-			self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
-		}
+		//if(self->on_message){
+	//		self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
+	//	}
 	} while (!done);
 }
 
@@ -220,9 +220,9 @@ static int _json_socket_connect(ubus_socket_t socket, const char *_address, uint
 	ubus_id_alloc(&self->clients, &cl->id, 0); 
 	
 	// connecting out generates the same event as connecting in
-	if(self->on_message){
-		self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
-	}
+	//if(self->on_message){
+	//	self->on_message(&self->api, cl->id.id, UBUS_MSG_PEER_CONNECTED, 0, 0); 
+	//}
 
 	if(id) *id = cl->id.id; 
 
@@ -255,32 +255,11 @@ static bool _ubus_json_client_recv(struct ubus_json_client *self, struct json_so
 			if(*ch == '\n'){
 				*ch = 0; 
 				blob_reset(&self->buf); 
-				if(!blob_put_json(&self->buf, self->recv_buffer)){
-					//printf("got invalid json!\n"); 
-					return false; 
+				if(blob_put_json(&self->buf, self->recv_buffer)){
+					if(socket->on_message)
+						socket->on_message(&socket->api, self->id.id, blob_field_first_child(blob_head(&self->buf)));  
 				}
-				if(socket->on_message){
-					struct blob_field *key, *value; 
-					bool valid = false, error = false, result = false; 
-					struct blob_field *params = NULL; 
-					const char *method = NULL; 
-					int id = 0; 
-					blob_field_for_each_kv(blob_field_first_child(blob_head(&self->buf)), key, value){
-						const char *k = blob_field_get_string(key); 
-						if(strcmp(k, "jsonrpc") == 0 && strcmp(blob_field_get_string(value), "2.0") == 0) valid = true; 
-						else if(strcmp(k, "id") == 0) id = blob_field_get_int(value); 
-						else if(strcmp(k, "method") == 0) method = blob_field_get_string(value); 
-						else if(strcmp(k, "params") == 0) params = value; 
-						else if(strcmp(k, "result") == 0) { params = value; result = true; }
-						else if(strcmp(k, "error") == 0) { params = value; error = true; } 
-					}
-					if(valid){
-						if(id && method) socket->on_message(&socket->api, self->id.id, UBUS_MSG_METHOD_CALL, id, params);  
-						else if(!id && method) socket->on_message(&socket->api, self->id.id, UBUS_MSG_SIGNAL, 0, params); 
-						else if(result) socket->on_message(&socket->api, self->id.id, UBUS_MSG_METHOD_RETURN, id, params);  
-						else if(error) socket->on_message(&socket->api, self->id.id, UBUS_MSG_ERROR, id, params);  
-					}
-				}
+
 				int pos = (ch - self->recv_buffer + 1); 
 				int rest_size = self->recv_count - pos; 
 				//printf("rest size %d\n", rest_size); 
@@ -375,46 +354,14 @@ static int _json_socket_handle_events(ubus_socket_t socket, int timeout){
 	return 0; 
 }
 
-static int _json_socket_send(ubus_socket_t socket, int32_t peer, int type, uint16_t serial, struct blob_field *msg){
+static int _json_socket_send(ubus_socket_t socket, int32_t peer, struct blob_field *msg){
 	struct json_socket *self = container_of(socket, struct json_socket, api); 
 	struct ubus_id *id;  
-	blob_reset(&self->buf); 
-	blob_offset_t ofs = blob_open_table(&self->buf); 
-	blob_put_string(&self->buf, "jsonrpc"); 
-	blob_put_string(&self->buf, "2.0"); 
-	switch(type){
-		case UBUS_MSG_METHOD_CALL: {
-			blob_put_string(&self->buf, "id"); 
-			blob_put_int(&self->buf, serial); 
-			blob_put_string(&self->buf, "method"); 
-			blob_put_string(&self->buf, "call"); 
-			blob_put_string(&self->buf, "params"); 
-			blob_put_attr(&self->buf, msg); 
-		} break; 
-		case UBUS_MSG_METHOD_RETURN: {
-			blob_put_string(&self->buf, "id"); 
-			blob_put_int(&self->buf, serial); 
-			blob_put_string(&self->buf, "result"); 
-			blob_put_attr(&self->buf, msg); 
-		} break; 
-		case UBUS_MSG_ERROR: {
-			blob_put_string(&self->buf, "id"); 
-			blob_put_int(&self->buf, serial); 
-			blob_put_string(&self->buf, "error"); 
-			blob_put_attr(&self->buf, msg); 
-		} break; 
-		case UBUS_MSG_SIGNAL: {
-			blob_put_string(&self->buf, "method"); 
-			blob_put_string(&self->buf, "signal"); 
-			blob_put_string(&self->buf, "params"); 
-			blob_put_attr(&self->buf, msg); 
-		} break; 
-	}
-	blob_close_table(&self->buf, ofs); 
+	
 	if(peer == UBUS_PEER_BROADCAST){
 		avl_for_each_element(&self->clients, id, avl){
 			struct ubus_json_client *client = (struct ubus_json_client*)container_of(id, struct ubus_json_client, id);  
-			struct ubus_json_frame *req = ubus_json_frame_new(type, serial, blob_field_first_child(blob_head(&self->buf)));
+			struct ubus_json_frame *req = ubus_json_frame_new(msg);
 			list_add(&req->list, &client->tx_queue); 
 			// try to send as much as we can right away
 			_ubus_json_client_send(client); 
@@ -423,7 +370,7 @@ static int _json_socket_send(ubus_socket_t socket, int32_t peer, int type, uint1
 		struct ubus_id *id = ubus_id_find(&self->clients, peer); 
 		if(!id) return -1; 
 		struct ubus_json_client *client = (struct ubus_json_client*)container_of(id, struct ubus_json_client, id);  
-		struct ubus_json_frame *req = ubus_json_frame_new(type, serial, blob_field_first_child(blob_head(&self->buf)));
+		struct ubus_json_frame *req = ubus_json_frame_new(msg);
 		list_add(&req->list, &client->tx_queue); 
 		_ubus_json_client_send(client); 
 	}

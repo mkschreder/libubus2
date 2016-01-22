@@ -48,21 +48,21 @@ struct ubus_peer *_create_peer(struct ubus_context *self, uint32_t id){
 
 	return peer; 
 }
-
+/*
 struct ubus_object *_find_object_by_name(struct ubus_context *self, const char *path){
 	struct avl_node *avl = avl_find(&self->objects_by_name, path); 
 	if(!avl) return NULL; 
 	return container_of(avl, struct ubus_object, avl); 
 }
+*/
+static void _send_well_known_name(struct ubus_context *self, uint32_t peer);
 
-void _on_msg_signal(struct ubus_context *self, struct ubus_peer *peer, uint32_t serial, struct blob_field *msg){
+void _on_msg_signal(struct ubus_context *self, struct ubus_peer *peer, const char *method, struct blob_field *msg){
 	// first argument is always signal type
-	struct blob_field *attr = blob_field_first_child(msg); 
-	const char *signal_name = blob_field_get_string(attr); 
-	if(!signal_name) return; 
+	if(!method) return; 
 
-	if(strcmp(signal_name, "ubus.peer.well_known_name") == 0){
-		attr = blob_field_next_child(msg, attr); 
+	if(strcmp(method, "ubus.peer.well_known_name") == 0){
+		struct blob_field *attr = blob_field_first_child(msg); 
 		const char *peer_name = blob_field_get_string(attr); 	
 
 		// do not allow changing name!
@@ -75,6 +75,9 @@ void _on_msg_signal(struct ubus_context *self, struct ubus_peer *peer, uint32_t 
 			// TODO: handle duplicates
 		}
 		// TODO: handle errors and make sure peers are authenticated
+		printf("registered new peer %s\n", peer_name); 
+		// send our name to the other peer as well
+		_send_well_known_name(self, peer->id); 
 	} 
 }
 
@@ -83,8 +86,65 @@ static void _on_resolve_method_call(struct ubus_request *req, struct blob_field 
 
 	// send reply with the same serial as the original request
 	//printf("sending response to %08x\n", req->src_id); 
+	blob_reset(&self->buf); 
+	blob_put_string(&self->buf, "jsonrpc"); 
+	blob_put_string(&self->buf, "2.0"); 
+	blob_put_string(&self->buf, "id"); 
+	blob_put_int(&self->buf, req->seq); 
+	blob_put_string(&self->buf, "result"); 
+	blob_put_attr(&self->buf, msg); 
 
-	ubus_socket_send(self->socket, req->src_id, UBUS_MSG_METHOD_RETURN, req->seq, msg);  
+	ubus_socket_send(self->socket, req->src_id, blob_head(&self->buf));  
+}
+
+static void _ubus_send_error(struct ubus_context *self, uint32_t peer, uint32_t seq, struct blob_field *msg){
+	blob_reset(&self->buf); 
+	blob_put_string(&self->buf, "jsonrpc"); 
+	blob_put_string(&self->buf, "2.0"); 
+	blob_put_string(&self->buf, "id"); 
+	blob_put_int(&self->buf, seq); 
+	blob_put_string(&self->buf, "error"); 
+	blob_put_attr(&self->buf, msg); 
+
+	ubus_socket_send(self->socket, peer, blob_head(&self->buf));  
+}
+
+static void _ubus_send_request(struct ubus_context *self, uint32_t peer, uint32_t seq, const char *rpc_method, const char *object, const char *method, struct blob_field *msg){
+	blob_reset(&self->buf); 
+	blob_put_string(&self->buf, "jsonrpc"); 
+	blob_put_string(&self->buf, "2.0"); 
+	blob_put_string(&self->buf, "id"); 
+	blob_put_int(&self->buf, seq); 
+	blob_put_string(&self->buf, "method"); 
+	blob_put_string(&self->buf, rpc_method); 
+	blob_put_string(&self->buf, "params"); 
+	blob_offset_t arr = blob_open_array(&self->buf); 
+		blob_put_string(&self->buf, object); 
+		blob_put_string(&self->buf, method); 
+		blob_put_attr(&self->buf, msg); 
+	blob_close_array(&self->buf, arr); 
+
+	ubus_socket_send(self->socket, peer, blob_head(&self->buf));  
+}
+
+static void _ubus_send_signal(struct ubus_context *self, uint32_t peer, const char *signal, struct blob_field *msg){
+	blob_reset(&self->buf); 
+	blob_put_string(&self->buf, "jsonrpc"); 
+	blob_put_string(&self->buf, "2.0"); 
+	blob_put_string(&self->buf, "method"); 
+	blob_put_string(&self->buf, signal); 
+	blob_put_string(&self->buf, "params"); 
+	blob_put_attr(&self->buf, msg); 
+
+	ubus_socket_send(self->socket, peer, blob_head(&self->buf));  
+}
+ 
+static void _send_well_known_name(struct ubus_context *self, uint32_t peer) {
+	struct blob buf; 
+	blob_init(&buf, 0, 0); 
+	blob_put_string(&buf, self->name); 
+	_ubus_send_signal(self, peer, "ubus.peer.well_known_name", blob_head(&buf));  
+	blob_free(&buf); 
 }
 
 static void _on_reject_method_call(struct ubus_request *req, struct blob_field *msg){
@@ -92,27 +152,24 @@ static void _on_reject_method_call(struct ubus_request *req, struct blob_field *
 
 	// send reply with the same serial as the original request
 	//printf("sending error to %08x\n", req->src_id); 
-	
-	blob_reset(&self->buf); 
-	struct blob_field *cur; 
-	blob_field_for_each_child(msg, cur){
-		blob_put_attr(&self->buf, cur); 
-	}
-	ubus_socket_send(self->socket, req->src_id, UBUS_MSG_ERROR, req->seq, blob_head(&self->buf));  
+
+	_ubus_send_error(self, req->src_id, req->seq, msg); 
 }
 
-static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint32_t serial, struct blob_field *msg){
+static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint32_t serial, const char *rpc_method, struct blob_field *params){
+	if(!self->root_obj) return; 
+
 	struct blob buf; 
 	blob_init(&buf, 0, 0); 
 	
 	// arg 2: object path
 	// arg 3: method name
 	// arg 4: arguments
-	struct blob_field *attr = blob_field_first_child(msg); 
+	/*struct blob_field *attr = blob_field_first_child(params); 
 	const char *object = blob_field_get_string(attr); 
-	attr = blob_field_next_child(msg, attr); 
+	attr = blob_field_next_child(params, attr); 
 	const char *method = blob_field_get_string(attr); 
-	attr = blob_field_next_child(msg, attr); 
+	attr = blob_field_next_child(params, attr); 
 
 	// find the object being refered to in our local list 
 	struct ubus_object *obj = _find_object_by_name(self, object); 
@@ -121,8 +178,8 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 		blob_put_int(&buf, UBUS_STATUS_NOT_FOUND); 
 		goto reject;
 	}
-
-	struct ubus_method *m = ubus_object_find_method(obj, method); 
+*/
+	struct ubus_method *m = ubus_object_find_method(self->root_obj, rpc_method); 
 	if(!m) {
 		//printf("method %s not found on %s\n", method, object); 
 		blob_put_int(&buf, UBUS_STATUS_METHOD_NOT_FOUND); 
@@ -133,7 +190,7 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 	// so that when the application code calls ubus_request_resolve() we can 
 	// send back the result over the network to the other peer
 
-	struct ubus_request *req = ubus_request_new(peer->name, object, method, msg); 
+	struct ubus_request *req = ubus_request_new(peer->name, self->root_obj->name, rpc_method, params); 
 	req->src_id = peer->id; 
 	req->seq = serial; 
 	ubus_request_set_userdata(req, self); 
@@ -141,11 +198,10 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 	ubus_request_on_reject(req, &_on_reject_method_call); 
 
 	int ret = 0; 
-	if((ret = ubus_method_invoke(m, self, obj, req, attr)) != 0){
+	if((ret = ubus_method_invoke(m, self, self->root_obj, req, params)) != 0){
 		blob_reset(&buf); 
 		blob_put_int(&buf, ret); 
-		blob_put_string(&buf, object); 
-		blob_put_string(&buf, method); 
+		blob_put_string(&buf, rpc_method); 
 		ubus_request_reject(req, blob_head(&buf)); 
 		ubus_request_delete(&req); 
 	} else {
@@ -154,8 +210,7 @@ static void _on_msg_call(struct ubus_context *self, struct ubus_peer *peer, uint
 	}
 	goto free; 
 reject: 
-	//ubus_request_reject(req, blob_head(&buf)); 
-	ubus_socket_send(self->socket, peer->id, UBUS_MSG_ERROR, serial, blob_head(&buf));  
+	_ubus_send_error(self, peer->id, req->seq, blob_head(&buf)); 
 free: 
 	blob_free(&buf); 
 }
@@ -193,46 +248,87 @@ static void _on_msg_error(struct ubus_context *self, struct ubus_peer *peer, uin
 	ubus_request_reject(req, msg); 
 	ubus_request_delete(&req); 
 }
-
-void _on_msg_client_connected(struct ubus_context *self, uint32_t peer_id){
-	_create_peer(self, peer_id); 
+/*
+struct ubus_peer* _on_msg_client_connected(struct ubus_context *self, uint32_t peer_id){
+	return _create_peer(self, peer_id); 
 	//printf("peer connected id %08x\n", peer_id); 	
 	// send out our name to peer
-	blob_reset(&self->buf); 
-	blob_put_string(&self->buf, "ubus.peer.well_known_name"); 
-	blob_put_string(&self->buf, self->name); 
-	ubus_socket_send(self->socket, peer_id, UBUS_MSG_SIGNAL, self->request_seq++, blob_head(&self->buf)); 
+	//blob_reset(&self->buf); 
+	//blob_put_string(&self->buf, "ubus.peer.well_known_name"); 
+	//blob_put_string(&self->buf, self->name); 
+	//TODO: send client well known name to the new peer
+	//ubus_socket_send(self->socket, peer_id, UBUS_MSG_SIGNAL, self->request_seq++, blob_head(&self->buf)); 
+}
+*/
+struct rpc_message {
+	uint32_t id; 
+	int type; 
+	const char *method; 
+	struct blob_field *params; 
+	struct blob_field *error; 
+	struct blob_field *result; 
+}; 
+
+static bool _parse_rpc_message(struct blob_field *field, struct rpc_message *self){
+	struct blob_field *key, *value; 
+	bool valid = false; 
+	memset(self, 0, sizeof(*self)); 	
+
+	blob_field_for_each_kv(field, key, value){
+		const char *k = blob_field_get_string(key); 
+		if(strcmp(k, "jsonrpc") == 0 && strcmp(blob_field_get_string(value), "2.0") == 0) valid = true; 
+		else if(strcmp(k, "id") == 0) self->id = blob_field_get_int(value); 
+		else if(strcmp(k, "method") == 0) self->method = blob_field_get_string(value); 
+		else if(strcmp(k, "params") == 0) self->params = value; 
+		else if(strcmp(k, "result") == 0) self->result = value; 
+		else if(strcmp(k, "error") == 0) self->error = value;
+	}
+	if(!valid) return false; 
+	if(self->id && self->method) self->type = UBUS_MSG_METHOD_CALL; 
+	else if(!self->id && self->method) self->type = UBUS_MSG_SIGNAL; 
+	else if(self->result) self->type = UBUS_MSG_METHOD_RETURN;  
+	else if(self->error) self->type = UBUS_MSG_ERROR;  
+	else return false; 
+	return true; 
 }
 
-static void _on_message_received(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
+static void _on_message_received(ubus_socket_t socket, uint32_t peer, struct blob_field *data){
 	struct ubus_context *self = (struct ubus_context*)ubus_socket_get_userdata(socket);  
 	assert(self); 
 
 	struct ubus_peer *p = _find_peer_by_id(self, peer);  
+	if(!p){
+		//printf("creating new peer context %08x\n", peer); 
+		p = _create_peer(self, peer); 
+	}
 
-	switch(type){
+	// parse json message
+	struct rpc_message msg; 
+	if(!_parse_rpc_message(data, &msg)){
+		printf("could not parse rpc message: "); 
+		blob_field_dump_json(data); 
+		return;  	
+	}
+
+	switch(msg.type){
 		case UBUS_MSG_METHOD_CALL: {
 			if(!p) break; 
-			_on_msg_call(self, p, serial, msg); 
+			_on_msg_call(self, p, msg.id, msg.method, msg.params); 
 			break; 
 		}
 		case UBUS_MSG_METHOD_RETURN: {		
 			if(!p) break; 
-			_on_msg_return(self, p, serial, msg); 
+			_on_msg_return(self, p, msg.id, msg.result); 
 			break; 
 		}
 		case UBUS_MSG_SIGNAL: {
 			if(!p) break; 
-			_on_msg_signal(self, p, serial, msg); 
+			_on_msg_signal(self, p, msg.method, msg.params); 
 			break; 
 		}
 		case UBUS_MSG_ERROR: {
 			if(!p) break; 
-			_on_msg_error(self, p, serial, msg); 
-			break; 
-		}
-		case UBUS_MSG_PEER_CONNECTED: {
-			_on_msg_client_connected(self, peer); 
+			_on_msg_error(self, p, msg.id, msg.error); 
 			break; 
 		}
 	}
@@ -244,8 +340,8 @@ void ubus_context_init(struct ubus_context *self, const char *name, ubus_socket_
 	INIT_LIST_HEAD(&self->pending_incoming); 
 	avl_init(&self->peers_by_name, avl_intcmp, false, NULL); 
 	avl_init(&self->peers_by_id, avl_intcmp, false, NULL); 
-	avl_init(&self->objects_by_name, avl_strcmp, false, NULL); 
-	avl_init(&self->objects_by_id, avl_intcmp, false, NULL); 
+	//avl_init(&self->objects_by_name, avl_strcmp, false, NULL); 
+	//avl_init(&self->objects_by_id, avl_intcmp, false, NULL); 
 	if(socket) { self->socket = *socket; *socket = NULL; }
 	else self->socket = ubus_rawsocket_new();  
 	ubus_socket_set_userdata(self->socket, self); 
@@ -279,10 +375,10 @@ void ubus_context_destroy(struct ubus_context *self){
 	}
 	
 	// remove all objects
-	struct ubus_object *obj, *optr; 
-	avl_for_each_element_safe(&self->objects_by_name, obj, avl, optr){
-		ubus_object_delete(&obj); 
-	}
+	//struct ubus_object *obj, *optr; 
+	//avl_for_each_element_safe(&self->objects_by_name, obj, avl, optr){
+//		ubus_object_delete(&obj); 
+	//}
 	// objects_by_id does not need to be freed!
 
 	ubus_socket_delete(self->socket); 
@@ -290,22 +386,32 @@ void ubus_context_destroy(struct ubus_context *self){
 	free(self->name); 
 }
 
-struct ubus_context *ubus_new(const char *name, ubus_socket_t *socket){
+struct ubus_context *ubus_new(const char *name, ubus_socket_t *socket, struct ubus_object **root){
 	struct ubus_context *self = calloc(1, sizeof(*self)); 
 	ubus_context_init(self, name, socket); 
+	if(root) { self->root_obj = *root; *root = 0; } 
+	else self->root_obj = ubus_object_new("root"); 
 	return self; 
 }
 
 void ubus_delete(struct ubus_context **self){
 	assert(self); 
 	ubus_context_destroy(*self); 
+	ubus_object_delete(&(*self)->root_obj); 
 	free(*self); 
 	*self = NULL; 
 }
 
 int ubus_connect(struct ubus_context *self, const char *path, uint32_t *peer_id){
 	if(!path) path = UBUS_DEFAULT_SOCKET; 
-	return ubus_socket_connect(self->socket, path, peer_id); 
+	uint32_t peer = 0; 
+	int ret = ubus_socket_connect(self->socket, path, &peer); 
+	if(ret < 0) return ret; 
+
+	_send_well_known_name(self, peer);
+
+	if(peer_id) *peer_id = peer; 
+	return 0; 
 }
 
 int ubus_listen(struct ubus_context *self, const char *path){
@@ -332,19 +438,14 @@ static void _ubus_send_pending(struct ubus_context *self){
 			continue; 
 		}
 		// see if we have the target client
-		blob_reset(&self->buf); 
-
 		struct ubus_peer *peer = _find_peer_by_name(self, req->dst_name); 
 
 		if(!peer) continue; 
-		
 		//printf("found peer for request %s %08x\n", req->dst_name, peer->id); 
 
+		_ubus_send_request(self, peer->id, req->seq, "call", req->object, req->method, blob_head(&req->buf));  
+
 		//blob_put_string(&self->buf, ""); 
-		blob_put_string(&self->buf, req->object); 
-		blob_put_string(&self->buf, req->method); 
-		blob_put_attr(&self->buf, blob_head(&req->buf)); 
-		ubus_socket_send(self->socket, peer->id, UBUS_MSG_METHOD_CALL, req->seq, blob_head(&self->buf)); 
 
 		// move the request to pending queue
 		list_del_init(&req->list); 
@@ -363,7 +464,7 @@ int ubus_send_request(struct ubus_context *self, struct ubus_request **_req){
 
 	return 0; 
 }
-
+/*
 uint32_t ubus_add_object(struct ubus_context *self, struct ubus_object **_obj){
 	// add the object to our local list of objects and tell all peers that we have this object
 	struct ubus_object *obj = *_obj; 
@@ -378,7 +479,7 @@ uint32_t ubus_add_object(struct ubus_context *self, struct ubus_object **_obj){
 
 	return obj->id.id; 
 }
-
+*/
 int ubus_handle_events(struct ubus_context *self){
 	// try to send out pending requests
 	struct ubus_request *req; 

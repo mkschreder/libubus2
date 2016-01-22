@@ -41,19 +41,18 @@ static int _on_forward_call(struct ubus_method *self, struct ubus_context *ctx, 
 	return 0; 
 }
 
-static int _on_list_objects(struct ubus_method *m, struct ubus_context *self, struct ubus_object *_obj, struct ubus_request *req, struct blob_field *msg){
-	//printf("list objects\n"); 	
+static int _on_list_objects(struct ubus_method *m, struct ubus_context *ctx, struct ubus_object *_obj, struct ubus_request *req, struct blob_field *msg){
+	//struct ubus_server *self = (struct ubus_server*)ubus_get_userdata(ctx); 
 	struct blob buf; 
 	blob_init(&buf, 0, 0); 
 
-	struct ubus_object *obj = NULL; 
-	blob_offset_t ofs = blob_open_table(&buf); 
-	avl_for_each_element(&self->objects_by_name, obj, avl){
+	//struct ubus_object *obj = NULL; 
+	ubus_object_serialize(ctx->root_obj, &buf); 
+	/*avl_for_each_element(&self->objects_by_name, obj, avl){
 		//printf("got object %s\n", obj->name); 
 		blob_put_string(&buf, obj->name); 
 		ubus_object_serialize(obj, &buf); 
-	}
-	blob_close_table(&buf, ofs); 
+	}*/
 
 	ubus_request_resolve(req, blob_head(&buf)); 	
 	blob_free(&buf); 
@@ -96,7 +95,7 @@ static int _on_publish_object(struct ubus_method *m, struct ubus_context *ctx, s
 	info->object = strdup(objname); 
 	ubus_object_set_userdata(obj, info); 
 
-	info->attached_id = ubus_add_object(ctx, &obj); 
+	//info->attached_id = ubus_add_object(ctx, &obj); 
 
 	list_add(&info->list, &self->objects); 
 
@@ -108,21 +107,19 @@ static int _on_publish_object(struct ubus_method *m, struct ubus_context *ctx, s
 
 struct ubus_server *ubus_server_new(const char *name, ubus_socket_t *socket){
 	struct ubus_server *self = calloc(1, sizeof(struct ubus_server)); 
-	
-	self->ctx = ubus_new(name, socket); 
-	INIT_LIST_HEAD(&self->objects); 
 
-	struct ubus_object *obj = ubus_object_new("/ubus/server"); 
-	struct ubus_method *method = ubus_method_new("ubus.server.publish", _on_publish_object); 
+	struct ubus_object *obj = ubus_object_new("root"); 
+	struct ubus_method *method = ubus_method_new("publish", _on_publish_object); 
 	ubus_method_add_param(method, "name", "s"); 
 	ubus_method_add_param(method, "signature", "[sa]"); 
 	ubus_object_add_method(obj, &method); 
 
-	method = ubus_method_new("ubus.server.list", _on_list_objects); 
+	method = ubus_method_new("list", _on_list_objects); 
 	ubus_object_add_method(obj, &method); 
 	ubus_object_set_userdata(obj, self); 
-
-	ubus_add_object(self->ctx, &obj); 
+	
+	self->ctx = ubus_new(name, socket, &obj); 
+	INIT_LIST_HEAD(&self->objects); 
 
 	ubus_set_userdata(self->ctx, self); 
 	return self; 

@@ -13,14 +13,14 @@
 
 #include "../src/libubus2.h"
 
-void on_message1(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
+void on_message1(ubus_socket_t socket, uint32_t peer, struct blob_field *msg){
 	printf("message1: from %08x\n", peer); 
 	blob_field_dump_json(msg); 
 }
-void on_message2(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
+void on_message2(ubus_socket_t socket, uint32_t peer, struct blob_field *msg){
 	printf("message2\n"); 
 }
-void on_message3(ubus_socket_t socket, uint32_t peer, uint8_t type, uint32_t serial, struct blob_field *msg){
+void on_message3(ubus_socket_t socket, uint32_t peer, struct blob_field *msg){
 	printf("message3\n"); 
 }
 
@@ -54,7 +54,7 @@ int main(int argc, char **argv){
 	blob_init(&buf, 0, 0); 
 	blob_put_int(&buf, 123); 
 
-	ubus_socket_send(client2, UBUS_PEER_BROADCAST, 0, 0, blob_head(&buf)); 
+	ubus_socket_send(client2, UBUS_PEER_BROADCAST, blob_head(&buf)); 
 
 	while(true){
 		//ubus_socket_send(client2, 0, 0, blob_head(&buf)); 

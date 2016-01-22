@@ -20,7 +20,7 @@ struct ubus_request *ubus_request_new(const char *client, const char *object, co
 	self->dst_name = strdup(client); 
 	self->object = strdup(object); 
 	self->method = strdup(method); 
-	blob_init(&self->buf, 0, 0); 
+	blob_init(&self->buf, 0, 0); 	
 	blob_put_attr(&self->buf, msg); 
 	return self; 
 }

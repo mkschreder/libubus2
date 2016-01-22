@@ -23,7 +23,7 @@ static int test_method(struct ubus_method *self, struct ubus_context *ctx, struc
 }
 
 void* client_thread(void *args){
-	struct ubus_context *ctx = ubus_new("client", NULL); 
+	struct ubus_context *ctx = ubus_new("client", NULL, NULL); 
 		
 	if(ubus_connect(ctx, "test.sock", NULL) < 0){
 		printf("Error connecting to ubus socket!\n"); 
@@ -39,7 +39,7 @@ void* client_thread(void *args){
 	ubus_method_add_return(method, "some_table", "a{sv}"); // returns a dictionary
 	
 	ubus_object_add_method(obj, &method); 
-	ubus_add_object(ctx, &obj); 
+	//ubus_add_object(ctx, &obj); 
 
 	while(true){
 		ubus_handle_events(ctx); 
