@@ -42,22 +42,8 @@
 
 #define UBUS_MSGBUF_REDUCTION_INTERVAL	16
 
-struct json_socket {
-	struct avl_tree clients; 
 
-	int listen_fd;
-
-	ubus_socket_msg_cb_t on_message; 
-	
-	struct blob buf; 
-
-	void *user_data; 
-
-	const struct ubus_socket_api *api; 
-}; 
-
-
-struct ubus_json_frame {
+struct ubus_socket_frame {
 	struct list_head list; 
 
 	char *data; 
@@ -386,7 +372,12 @@ static void *_json_socket_userdata(ubus_socket_t socket, void *ptr){
 
 static int _json_socket_disconnect(ubus_socket_t socket, uint32_t client_id){
 	struct json_socket *self = container_of(socket, struct json_socket, api); 
-	printf("json socket disconnect not implemented! %p\n", self); 
+	struct ubus_id *id = ubus_id_find(&self->clients, client_id); 
+	if(!id) return -1; 
+	struct ubus_json_client *client = container_of(id, struct ubus_json_client, id); 
+	printf("client %08x disconnected!\n", client->id.id); 
+	ubus_id_free(&self->clients, &client->id); 
+	ubus_json_client_delete(&client); 
 	return 0; 
 }
 

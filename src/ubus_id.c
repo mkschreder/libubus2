@@ -59,6 +59,7 @@ bool ubus_id_alloc(struct avl_tree *tree, struct ubus_id *id, uint32_t val){
 	do {
 		if (read(random_fd, &id->id, sizeof(id->id)) != sizeof(id->id))
 			return false;
+		id->id &= 0x7fffffff; // limit to only positive 32 bit ints
 	} while (avl_insert(tree, &id->avl) != 0);
 
 	return true;

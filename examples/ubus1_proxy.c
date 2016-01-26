@@ -1,7 +1,5 @@
 #include <stdio.h>
 #include "../src/libubus2.h"
-#include "../sockets/json_socket.h"
-#include "../sockets/json_websocket.h"
 
 bool running = true; 
 
@@ -22,10 +20,9 @@ void do_crash_exit(){
 }
 
 int main(int argc, char **argv){
-	ubus_socket_t sock = json_socket_new(); 
-	ubus_socket_on_message(sock, _on_message); 
+	ubus_socket_t sock = ubus_socket_new(); 
 	uint32_t id = 0; 
-	if(0 != ubus_socket_connect(sock, "/var/run/ubus-json.sock", &id)){
+	if(0 != ubus_socket_connect(sock, "json:///var/run/ubus-json.sock", &id)){
 		printf("could not connect to ubus!\n"); 
 		return -1; 
 	}

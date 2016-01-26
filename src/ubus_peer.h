@@ -18,7 +18,6 @@
 struct ubus_peer {
 	struct avl_node avl_id; 
 	struct avl_node avl_name; 
-	struct avl_tree peers; // child peers 
 	struct avl_tree objects; 
 	char *name; 
 	uint32_t id; 

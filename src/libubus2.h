@@ -22,6 +22,9 @@
 #include <stdint.h>
 
 #include "ubus_context.h"
-#include "ubus_socket.h"
+#include "ubus_srv.h"
 #include "ubus_server.h"
 #include "ubus_client.h"
+#include "ubus_srv_ws.h"
+
+bool url_scanf(const char *url, char *proto, char *host, int *port, char *path); 

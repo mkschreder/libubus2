@@ -25,7 +25,7 @@ struct ubus_client *ubus_client_new(const char *name){
 	ubus_object_add_method(obj, &method); 
 	ubus_object_set_userdata(obj, self); 
 
-	self->ctx = ubus_new(name, NULL, &obj); 
+	self->ctx = ubus_new(name, &obj); 
 
 	ubus_set_userdata(self->ctx, self); 
 

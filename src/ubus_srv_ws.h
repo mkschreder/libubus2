@@ -11,19 +11,19 @@
  * GNU General Public License for more details.
  */
 
-#pragma once
-/*
-struct ubus_server {
-	struct ubus_context *ctx; 
-	struct avl_tree clients; 
-	//struct avl_tree objects_by_name; 
-	//struct avl_tree objects_by_id; 
-	struct list_head objects; 
-}; 
+#pragma once 
 
-struct ubus_server *ubus_server_new(const char *name); 
-void ubus_server_delete(struct ubus_server **self); 
+#include <blobpack/blobpack.h>
+#include "ubus_srv.h"
 
-int ubus_server_listen(struct ubus_server *self, const char *path); 
-int ubus_server_handle_events(struct ubus_server *self); 
+ubus_server_t ubus_srv_ws_new(void); 
+
+/*void json_websocket_delete(struct json_websocket **self); 
+
+int json_websocket_listen(struct json_websocket *self, const char *path); 
+int json_websocket_connect(struct json_websocket *self, const char *path); 
+
+int json_websocket_handle_events(struct json_websocket *self); 
+
+static inline void json_websocket_on_message(struct json_websocket *self, json_websocket_data_cb_t cb){ self->on_message = cb; } 
 */

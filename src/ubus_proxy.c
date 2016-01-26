@@ -1,3 +1,16 @@
+/*
+ * Copyright (C) 2016 Martin K. Schröder <mkschreder.uk@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License version 2.1
+ * as published by the Free Software Foundation
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "ubus_proxy.h"
@@ -66,7 +79,9 @@ static void _on_in_message_received(ubus_socket_t socket, uint32_t peer, struct 
 	} 
 	printf("proxy: proxy request from %08x to %08x\n", peer, p->outpeer); 
 	printf("proxy request message: "); blob_field_dump_json(msg); 
-	ubus_socket_send(self->outsock, p->outpeer, msg); 
+	if(ubus_socket_send(self->outsock, p->outpeer, msg) < 0){
+		printf("proxy message send failed to outsocket\n"); 
+	}
 	
 	return; 
 	//TODO: fix client connect/disconnect
@@ -114,7 +129,14 @@ static void _on_out_message_received(ubus_socket_t socket, uint32_t peer, struct
 	struct ubus_proxy_peer *p = container_of(id, struct ubus_proxy_peer, id_out); 
 	//printf("proxy: proxy response from %08x to %08x\n", peer, p->inpeer); 
 	printf("proxy return message: "); blob_field_dump_json(msg); 
-	ubus_socket_send(self->insock, p->inpeer, msg); 
+	if(ubus_socket_send(self->insock, p->inpeer, msg) < 0){
+		ubus_socket_disconnect(self->outsock, p->id_out.id); 
+		ubus_id_free(&self->clients_out, &p->id_out); 
+		ubus_id_free(&self->clients_in, &p->id_in); 
+		ubus_proxy_peer_delete(&p); 
+
+		printf("proxy peer disconnected!\n"); 
+	}
 }
 
 int ubus_proxy_handle_events(struct ubus_proxy *self){

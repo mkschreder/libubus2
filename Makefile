@@ -2,28 +2,24 @@ BUILD_DIR=build_dir
 STATIC_LIB=libubus2.a
 SHARED_LIB=libubus2.so 
 SOURCE=\
-	src/ubus_context.c \
-	src/ubus_client.c \
-	src/ubus_object.c \
-	src/ubus_method.c \
+	src/ubus_message.c \
 	src/ubus_id.c \
-	src/ubus_peer.c \
-	src/ubus_request.c \
-	src/ubus_server.c \
-	src/ubus_rawsocket.c \
-	src/ubus_proxy.c \
-	src/libubus2.c \
-	sockets/json_websocket.c \
-	sockets/json_socket.c
+	src/ubus_srv_ws.c 
 
 INSTALL_PREFIX:=$(DESTDIR)/usr/
 
 OBJECTS=$(addprefix $(BUILD_DIR)/,$(patsubst %.c,%.o,$(SOURCE)))
 
 CFLAGS+=-g -Isrc -Wall -Werror -std=gnu99 -Wmissing-field-initializers
-LDFLAGS+=-lblobpack -lusys -lutype -ldl -lwebsockets -lm
+LDFLAGS+=-lblobpack -lusys -lutype -ldl -lpthread -lwebsockets -lm
 
-all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) ubus1-example cli-example socket-example client-example threads-example websocket-example
+all: $(BUILD_DIR) $(STATIC_LIB) $(SHARED_LIB) \
+	websocket-example
+#	ubus1-example \
+#	cli-example \
+#	socket-example \
+#	client-example \
+#	threads-example \
 
 #extras: 
 #	make -C lua 
@@ -54,8 +50,8 @@ cli-example: examples/cli.o $(OBJECTS)
 ubus1-example: examples/ubus1_proxy.o $(OBJECTS)
 	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $(OBJECTS) examples/ubus1_proxy.o $(LDFLAGS) -L$(BUILD_DIR) -lpthread
 
-websocket-example: examples/websocket.o $(OBJECTS)
-	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $(OBJECTS) examples/websocket.o $(LDFLAGS) -L$(BUILD_DIR) -lpthread
+websocket-example: examples/websocket.o src/ubus_id.o src/ubus_message.o src/ubus_srv_ws.o 
+	$(CC) -I$(shell pwd) $(CFLAGS) -o $@ $^ $(LDFLAGS) -L$(BUILD_DIR) -lpthread
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -65,7 +61,7 @@ install:
 	mkdir -p $(INSTALL_PREFIX)/lib/
 	mkdir -p $(INSTALL_PREFIX)/include/libubus2/
 	cp -R $(SHARED_LIB) $(STATIC_LIB) $(INSTALL_PREFIX)/lib
-	cp -R src/*.h sockets/*.h $(INSTALL_PREFIX)/include/libubus2/
+	cp -R src/*.h $(INSTALL_PREFIX)/include/libubus2/
 clean: 
 	rm -rf build_dir
 	rm -f examples/*.o

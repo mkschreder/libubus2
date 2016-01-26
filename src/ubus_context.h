@@ -22,8 +22,7 @@
 #include "ubus_request.h"
 #include "ubus_method.h"
 #include "ubus_object.h"
-#include "ubus_socket.h"
-#include "ubus_rawsocket.h"
+#include "ubus_srv.h"
 #include "ubus_proxy.h"
 #include "ubus_context.h"
 
@@ -41,7 +40,7 @@ struct ubus_context {
 	struct list_head pending; 
 	struct list_head pending_incoming; 
 
-	ubus_socket_t socket; 
+	struct ubus_socket *socket; 
 
 	uint16_t request_seq;
 
@@ -52,12 +51,12 @@ struct ubus_context {
 	void *user_data; 
 };
 
-struct ubus_context *ubus_new(const char *name, ubus_socket_t *socket, struct ubus_object **root);
+struct ubus_context *ubus_new(const char *name, struct ubus_object **root);
 void ubus_delete(struct ubus_context **self); 
 int ubus_connect(struct ubus_context *self, const char *path, uint32_t *peer_id); 
-int ubus_set_peer_localname(struct ubus_context *self, uint32_t peer, const char *localname); 
-
 int ubus_listen(struct ubus_context *self, const char *path); 
+
+int ubus_set_peer_localname(struct ubus_context *self, uint32_t peer, const char *localname); 
 
 int ubus_send_request(struct ubus_context *self, struct ubus_request **req); 
 //uint32_t ubus_add_object(struct ubus_context *self, struct ubus_object **obj); 
@@ -67,3 +66,4 @@ const char *ubus_status_to_string(int8_t status);
 
 static inline void ubus_set_userdata(struct ubus_context *self, void *ptr){ self->user_data = ptr; }
 static inline void *ubus_get_userdata(struct ubus_context *self) { return self->user_data; }
+

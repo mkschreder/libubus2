@@ -11,19 +11,18 @@
  * GNU General Public License for more details.
  */
 
-#pragma once
-/*
-struct ubus_server {
-	struct ubus_context *ctx; 
-	struct avl_tree clients; 
-	//struct avl_tree objects_by_name; 
-	//struct avl_tree objects_by_id; 
-	struct list_head objects; 
-}; 
+#include "ubus_message.h"
 
-struct ubus_server *ubus_server_new(const char *name); 
-void ubus_server_delete(struct ubus_server **self); 
+struct ubus_message *ubus_message_new(){
+	struct ubus_message *self = calloc(1, sizeof(struct ubus_message)); 
+	blob_init(&self->buf, 0, 0); 
+	INIT_LIST_HEAD(&self->list); 
+	return self; 
+}
 
-int ubus_server_listen(struct ubus_server *self, const char *path); 
-int ubus_server_handle_events(struct ubus_server *self); 
-*/
+void ubus_message_delete(struct ubus_message **self){
+	blob_free(&(*self)->buf); 
+	list_del_init(&(*self)->list); 
+	free(*self); 
+	*self = 0; 
+}

@@ -28,6 +28,24 @@ struct ubus_peer *ubus_peer_new(const char *key, uint32_t id){
 	return self; 
 }
 
+static struct ubus_rawsocket_client *ubus_rawsocket_client_new(int fd){
+	struct ubus_rawsocket_client *self = calloc(1, sizeof(struct ubus_rawsocket_client)); 
+	INIT_LIST_HEAD(&self->tx_queue); 
+	self->fd = fd; 
+	self->recv_count = 0; 
+	blob_init(&self->data, 0, 0); 
+	return self; 
+}
+
+static void ubus_rawsocket_client_delete(struct ubus_rawsocket_client **self){
+	shutdown((*self)->fd, SHUT_RDWR); 
+	close((*self)->fd); 
+	blob_free(&(*self)->data); 
+	free(*self); 
+	*self = NULL;
+}
+
+
 void ubus_peer_delete(struct ubus_peer **_self){
 	assert(_self); 
 	struct ubus_peer *self = *_self; 
