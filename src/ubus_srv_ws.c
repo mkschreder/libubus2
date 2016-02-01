@@ -18,6 +18,7 @@
 #include "../src/ubus_message.h"
 #include "../src/ubus_srv.h"
 #include "../src/ubus_id.h"
+#include "mimetypes.h"
 #include <libutype/list.h>
 #include <libutype/avl.h>
 #include <libwebsockets.h>
@@ -47,6 +48,7 @@ struct ubus_srv_ws {
 	pthread_mutex_t qlock; 
 	pthread_cond_t rx_ready; 
 	struct list_head rx_queue; 
+	const char *www_root; 
 	void *user_data; 
 }; 
 
@@ -184,41 +186,22 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 			// TODO: implement once we support outgoing websocket connections
 			break;
 		case LWS_CALLBACK_HTTP: {
+			struct ubus_srv_ws *self = (struct ubus_srv_ws*)proto->user; 
             char *requested_uri = (char *) in;
             printf("requested URI: %s\n", requested_uri);
            
             if (strcmp(requested_uri, "/") == 0) 
 				requested_uri = "/index.html"; 
 
-		  	char *www_root = "/www/"; // TODO: make configuratble 
 			// allocate enough memory for the resource path
-			char *resource_path = malloc(strlen(www_root) + strlen(requested_uri));
+			char *resource_path = malloc(strlen(self->www_root) + strlen(requested_uri) + 1);
 		   
 			// join current working direcotry to the resource path
-			sprintf(resource_path, "%s%s", www_root, requested_uri);
+			sprintf(resource_path, "%s%s", self->www_root, requested_uri);
 			printf("resource path: %s\n", resource_path);
 		   
 			char *extension = strrchr(resource_path, '.');
-			char *mime;
-		   
-			// choose mime type based on the file extension
-			if (extension == NULL) {
-				mime = "text/plain";
-			} else if (strcmp(extension, ".png") == 0) {
-				mime = "image/png";
-			} else if (strcmp(extension, ".jpg") == 0) {
-				mime = "image/jpg";
-			} else if (strcmp(extension, ".gif") == 0) {
-				mime = "image/gif";
-			} else if (strcmp(extension, ".html") == 0) {
-				mime = "text/html";
-			} else if (strcmp(extension, ".css") == 0) {
-				mime = "text/css";
-			} else if (strcmp(extension, ".js") == 0) {
-				mime = "text/javascript";
-			} else {
-				mime = "text/plain";
-			}
+		  	const char *mime = mimetype_lookup(extension); 
 		   
 			// by default non existing resources return code 404
 			lws_serve_http_file(wsi, resource_path, mime, NULL, 0);
@@ -343,8 +326,9 @@ static int _websocket_recv(ubus_server_t socket, struct ubus_message **msg){
 }
 
 
-ubus_server_t ubus_srv_ws_new(void){
+ubus_server_t ubus_srv_ws_new(const char *www_root){
 	struct ubus_srv_ws *self = calloc(1, sizeof(struct ubus_srv_ws)); 
+	self->www_root = (www_root)?www_root:"/www/"; 
 	self->protocols = calloc(2, sizeof(struct lws_protocols)); 
 	self->protocols[0] = (struct lws_protocols){
 		.name = "",

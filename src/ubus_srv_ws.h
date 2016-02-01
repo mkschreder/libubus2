@@ -16,7 +16,7 @@
 #include <blobpack/blobpack.h>
 #include "ubus_srv.h"
 
-ubus_server_t ubus_srv_ws_new(void); 
+ubus_server_t ubus_srv_ws_new(const char *www_root); 
 
 /*void json_websocket_delete(struct json_websocket **self); 
 

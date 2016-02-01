@@ -19,7 +19,7 @@ int main(int argc, char **argv){
 	signal(SIGINT, handle_sigint); 
 	signal(SIGUSR1, do_crash_exit); 
 
-	ubus_server_t server = ubus_srv_ws_new(); 
+	ubus_server_t server = ubus_srv_ws_new(NULL); 
 
 	if(ubus_server_listen(server, "ws://localhost:1234") < 0){
 		fprintf(stderr, "server could not listen on specified socket!\n"); 
