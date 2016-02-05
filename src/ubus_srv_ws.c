@@ -168,15 +168,18 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 			if(blob_put_json(&(*user)->msg->buf, in)){
 				//struct blob_field *rpcobj = blob_field_first_child(blob_head(&self->buf)); 
 				//TODO: add message to queue
-				printf("websocket message\n"); 
+				printf("websocket message: "); 
+				blob_dump_json(&(*user)->msg->buf); 
+
+				// place the message on the queue
 				pthread_mutex_lock(&self->qlock); 
 				(*user)->msg->peer = (*user)->id.id; 
 				list_add(&(*user)->msg->list, &self->rx_queue); 
 				(*user)->msg = ubus_message_new(); 
-				pthread_mutex_unlock(&self->qlock); 
 				pthread_cond_signal(&self->rx_ready); 
+				pthread_mutex_unlock(&self->qlock); 
 			}
-			//lws_rx_flow_control(wsi, 0); 
+			lws_rx_flow_control(wsi, 0); 
 			lws_callback_on_writable(wsi); 	
 			break; 
 		}
