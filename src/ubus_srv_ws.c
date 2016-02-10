@@ -168,18 +168,20 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 			if(blob_put_json(&(*user)->msg->buf, in)){
 				//struct blob_field *rpcobj = blob_field_first_child(blob_head(&self->buf)); 
 				//TODO: add message to queue
-				printf("websocket message: "); 
-				blob_dump_json(&(*user)->msg->buf); 
+				//printf("websocket message: "); 
+				//blob_dump_json(&(*user)->msg->buf); 
 
 				// place the message on the queue
 				pthread_mutex_lock(&self->qlock); 
 				(*user)->msg->peer = (*user)->id.id; 
 				list_add(&(*user)->msg->list, &self->rx_queue); 
 				(*user)->msg = ubus_message_new(); 
-				pthread_cond_signal(&self->rx_ready); 
 				pthread_mutex_unlock(&self->qlock); 
+				pthread_cond_signal(&self->rx_ready); 
+			} else {
+				printf("got bad message\n"); 
 			}
-			lws_rx_flow_control(wsi, 0); 
+			//lws_rx_flow_control(wsi, 0); 
 			lws_callback_on_writable(wsi); 	
 			break; 
 		}
@@ -208,6 +210,8 @@ static int _ubus_socket_callback(struct lws *wsi, enum lws_callback_reasons reas
 		   
 			// by default non existing resources return code 404
 			lws_serve_http_file(wsi, resource_path, mime, NULL, 0);
+			// we have to check this otherwise we will get incomplete transfers
+			if(lws_send_pipe_choked(wsi)) break; 
 			// return 1 so that the connection shall be closed
 			return 1; 
        	} break;     
@@ -313,6 +317,7 @@ static int _websocket_recv(ubus_server_t socket, struct ubus_message **msg){
 	pthread_mutex_lock(&self->qlock); 
 	if(list_empty(&self->rx_queue)){
 		if(pthread_cond_timedwait(&self->rx_ready, &self->qlock, &t) == ETIMEDOUT){
+			//printf("timeout\n"); 
 			pthread_mutex_unlock(&self->qlock); 
 			return -EAGAIN; 
 		}
@@ -325,7 +330,7 @@ static int _websocket_recv(ubus_server_t socket, struct ubus_message **msg){
 	list_del_init(&m->list); 
 	*msg = m; 
 	pthread_mutex_unlock(&self->qlock); 
-	return 0; 
+	return 1; 
 }
 
 

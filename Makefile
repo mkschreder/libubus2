@@ -4,7 +4,8 @@ SHARED_LIB=libubus2.so
 SOURCE=\
 	src/ubus_message.c \
 	src/ubus_id.c \
-	src/ubus_srv_ws.c 
+	src/ubus_srv_ws.c \
+	src/ubus_cli_js.c 
 
 INSTALL_PREFIX:=$(DESTDIR)/usr/
 
