@@ -256,7 +256,7 @@ int _websocket_listen(ubus_server_t socket, const char *path){
 	info.uid = -1; 
 	info.user = self; 
 	info.protocols = self->protocols; 
-	info.extensions = lws_get_internal_extensions();
+	//info.extensions = lws_get_internal_extensions();
 	info.options = LWS_SERVER_OPTION_VALIDATE_UTF8;
 
 	self->ctx = lws_create_context(&info); 
